@@ -7,7 +7,7 @@
 #include "input.h"
 
 // initial and final radius of trust region
-static const double RBEG = 1e1;
+static const double RBEG = 1e0;
 static const double REND = 1e-10;
 
 // maximum number of function evaluation
@@ -36,12 +36,12 @@ double mapdist(const long n, const double* p, void* ctx_)
     // anchor point of image 0
     const double* a0 = ctx->a0;
     
-    // shear of image 0
+    // reference shear
     const double g1 = p[0];
     const double g2 = p[1];
     
-    // chi^2 value
-    double chi2 = 0;
+    // total distance between observed and mapped points
+    double dist = 0;
     
     // try to map points from image 0 to image i
     for(int i = 1; i < ni; ++i)
@@ -49,33 +49,28 @@ double mapdist(const long n, const double* p, void* ctx_)
         // anchor point of image
         const double x0[2] = { p[5*i-3], p[5*i-2] };
         
-        // convergence ratio and shear of image
-        const double F  = p[5*i-1];
-        const double G1 = p[5*i+0];
-        const double G2 = p[5*i+1];
+        // matrix coefficients
+        const double a = p[5*i-1];
+        const double b = p[5*i+0];
+        const double c = g2*a - g1*b;
+        const double d = p[5*i+1];
         
         // transformation matrix
-        const double T[4] = {
-            F*((1 - g1)*(1 + G1) - g2*G2)/(1 - G1*G1 - G2*G2),
-            F*((1 + g1)*G2 - (1 + G1)*g2)/(1 - G1*G1 - G2*G2),
-            F*((1 - g1)*G2 - (1 - G1)*g2)/(1 - G1*G1 - G2*G2),
-            F*((1 + g1)*(1 - G1) - g2*G2)/(1 - G1*G1 - G2*G2)
-        };
+        const double T[4] = { 0.5*(d + a), 0.5*(b - c),
+                              0.5*(b + c), 0.5*(d - a) };
         
         // map points, apply whitening transform and compute distance
         for(int j = 0; j < nx; ++j)
         {
             // reference point
-            const double aj[2] = { x[nx*5*0+j*5+0], x[nx*5*0+j*5+1] };
+            const double aj[2] = { x[5*nx*0+5*j+0], x[5*nx*0+5*j+1] };
             
             // observed point
-            const double xj[2] = { x[nx*5*i+5*j+0], x[nx*5*i+5*j+1] };
+            const double xj[2] = { x[5*nx*i+5*j+0], x[5*nx*i+5*j+1] };
             
             // whitening transform for observed point
-            const double W[4] = {
-                x[nx*5*i+5*j+2], x[nx*5*i+5*j+3],
-                              0, x[nx*5*i+5*j+4]
-            };
+            const double W[4] = { x[5*nx*i+5*j+2], x[5*nx*i+5*j+3],
+                                                0, x[5*nx*i+5*j+4] };
             
             // offset between predicted and observed position
             const double D[2] = {
@@ -89,13 +84,13 @@ double mapdist(const long n, const double* p, void* ctx_)
                 W[2]*D[0] + W[3]*D[1]
             };
             
-            // add to chi^2
-            chi2 += d[0]*d[0] + d[1]*d[1];
+            // add to total distance
+            dist += d[0]*d[0] + d[1]*d[1];
         }
     }
     
-    // return the chi^2 value
-    return chi2;
+    // return the total distance
+    return dist;
 }
 
 int main(int argc, char* argv[])
@@ -112,7 +107,6 @@ int main(int argc, char* argv[])
     int ni;
     int nx;
     double* x;
-    double* c;
     
     // parameters
     int np;
@@ -236,6 +230,11 @@ int main(int argc, char* argv[])
         }
     }
     
+    
+    /**************
+     * initialise *
+     **************/
+    
     // total number of parameters, including fixed ones
     np = 5*ni;
     
@@ -247,38 +246,17 @@ int main(int argc, char* argv[])
         return EXIT_FAILURE;
     }
     
-    
-    /**************
-     * initialise *
-     **************/
-    
-    // create array for centroids
-    c = malloc(2*ni*sizeof(double));
-    if(!c)
-    {
-        perror(NULL);
-        return EXIT_FAILURE;
-    }
-    
-    // compute centroid of points for each image
+    // set anchor point to centroid of points for each image
     for(int i = 0; i < ni; ++i)
     {
-        c[2*i+0] = 0;
-        c[2*i+1] = 0;
+        double c[2] = { 0, 0 };
         for(int j = 0; j < nx; ++j)
         {
-            c[2*i+0] += x[nx*5*i+5*j+0];
-            c[2*i+1] += x[nx*5*i+5*j+1];
+            c[0] += x[nx*5*i+5*j+0];
+            c[1] += x[nx*5*i+5*j+1];
         }
-        c[2*i+0] /= nx;
-        c[2*i+1] /= nx;
-    }
-    
-    // set anchor points to centroids
-    for(int i = 0; i < ni; ++i)
-    {
-        p[5*i+0] = c[2*i+0];
-        p[5*i+1] = c[2*i+1];
+        p[5*i+0] = c[0]/nx;
+        p[5*i+1] = c[1]/nx;
     }
     
     // compute a,b,d coefficients from given points
@@ -349,31 +327,6 @@ int main(int argc, char* argv[])
         }
     }
     
-    // convert g,a,b,d parameters to convergence ratio and shear
-    for(int i = 1; i < ni; ++i)
-    {
-        // reference shear
-        const double g1 = p[3];
-        const double g2 = p[4];
-        
-        // a,b,c,d coefficients for image
-        const double a = p[5*i+2];
-        const double b = p[5*i+3];
-        const double c = g2*a - g1*b;
-        const double d = p[5*i+4];
-        
-        // numerator and denominator for f and g
-        const double J = 0.5*(c*c + d*d - a*a - b*b);
-        const double P = d*g1 - c*g2 + a;
-        const double Q = c*g1 + d*g2 + b;
-        const double R = a*g1 + b*g2 + d;
-        
-        // store initial f,g1,g2 for image
-        p[5*i+2] = J/R;
-        p[5*i+3] = P/R;
-        p[5*i+4] = Q/R;
-    }
-    
     
     /************
      * minimise *
@@ -414,6 +367,31 @@ int main(int argc, char* argv[])
     /**********
      * output *
      **********/
+    
+    // convert g,a,b,d parameters to convergence ratio and shear
+    for(int i = 1; i < ni; ++i)
+    {
+        // reference shear
+        const double g1 = p[3];
+        const double g2 = p[4];
+        
+        // a,b,c,d coefficients for image
+        const double a = p[5*i+2];
+        const double b = p[5*i+3];
+        const double c = g2*a - g1*b;
+        const double d = p[5*i+4];
+        
+        // numerator and denominator for f and g
+        const double J = 0.5*(c*c + d*d - a*a - b*b);
+        const double P = d*g1 - c*g2 + a;
+        const double Q = c*g1 + d*g2 + b;
+        const double R = a*g1 + b*g2 + d;
+        
+        // store initial f,g1,g2 for image
+        p[5*i+2] = J/R;
+        p[5*i+3] = P/R;
+        p[5*i+4] = Q/R;
+    }
     
     // print table of convergence ratios and shears
     if(v >= 0)
@@ -466,7 +444,6 @@ int main(int argc, char* argv[])
      ************/
     
     free(x);
-    free(c);
     free(p);
     
     
