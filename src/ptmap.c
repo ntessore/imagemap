@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
     // check for input errors
     if(err)
     {
-        fprintf(stderr, "usage: ptmap [-v] [-o OUTFILE] [-m MATFILE] FILE\n");
+        fprintf(stderr, "usage: ptmap [-vq] [-o OUTFILE] [-m MATFILE] FILE\n");
         return EXIT_FAILURE;
     }
     
