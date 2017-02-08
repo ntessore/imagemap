@@ -100,6 +100,7 @@ int main(int argc, char* argv[])
     
     // input
     char* f;
+    char* o;
     char* m;
     int v;
     
@@ -123,7 +124,7 @@ int main(int argc, char* argv[])
      *********/
     
     // default arguments
-    f = m = NULL;
+    f = o = m = NULL;
     v = 0;
     
     // parse arguments
@@ -144,6 +145,21 @@ int main(int argc, char* argv[])
                 else if(*a == 'q')
                 {
                     v -= 1;
+                }
+                // output file
+                else if(*a == 'o')
+                {
+                    if(!o)
+                    {
+                        if(i + 1 < argc)
+                            o = argv[++i];
+                        else
+                            err = 1;
+                    }
+                    else
+                    {
+                        err = 1;
+                    }
                 }
                 // output matrix file
                 else if(*a == 'm')
@@ -184,7 +200,7 @@ int main(int argc, char* argv[])
     // check for input errors
     if(err)
     {
-        fprintf(stderr, "usage: ptmap [-v] [-m MATFILE] FILE\n");
+        fprintf(stderr, "usage: ptmap [-v] [-o OUTFILE] [-m MATFILE] FILE\n");
         return EXIT_FAILURE;
     }
     
@@ -400,6 +416,26 @@ int main(int argc, char* argv[])
         for(int i = 0; i < ni; ++i)
             printf("%4d  %8.4f  %8.4f  %8.4f\n",
                    i, p[5*i+2], p[5*i+3], p[5*i+4]);
+    }
+    
+    // write convergence ratios and shears if asked to
+    if(o)
+    {
+        // open matrix file for writing
+        FILE* fp = fopen(o, "w");
+        if(!fp)
+        {
+            perror(o);
+            return EXIT_FAILURE;
+        }
+        
+        // write convergence ratios and shears
+        for(int i = 0; i < ni; ++i)
+            fprintf(fp, "% 18.8f % 18.8f % 18.8f\n",
+                    p[5*i+2], p[5*i+3], p[5*i+4]);
+        
+        // done
+        fclose(fp);
     }
     
     // write transformation matrices if asked to
