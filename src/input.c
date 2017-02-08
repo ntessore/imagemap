@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "input.h"
 
@@ -41,7 +42,7 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
     // number of columns in line
     int nc;
     
-    // open fitfile
+    // open points file
     fp = fopen(filename, "r");
     if(!fp)
     {
@@ -52,7 +53,7 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
     // points array must be NULL for first call to realloc
     p = NULL;
     
-    // read fitfile line by line
+    // read file line by line
     for(int line = 1; fgets(linebuf, sizeof(linebuf), fp); ++line)
     {
         // get whole line
@@ -99,7 +100,7 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
             exit(1);
         }
         
-        // expand points and files array for image
+        // expand points array for image
         p = realloc(p, 5*(ni+1)*np*sizeof(double));
         if(!p)
         {
@@ -125,27 +126,21 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
             // terminate column string
             linebuf[begin + len] = 0;
             
-            // parse point
+            // parse point, with fallthrough
             switch(sscanf(linebuf + begin, "%lf,%lf,%lf,%lf,%lf", &x, &y, &dx, 
                           &dy, &rho))
             {
                 case 2:
                     // no uncertainty given: assume 1px and uncorrelated
                     dx = 1;
-                    dy = 1;
-                    rho = 0;
-                    break;
                     
                 case 3:
                     // only dx given, assume dy same and uncorrelated
                     dy = dx;
-                    rho = 0;
-                    break;
                     
                 case 4:
                     // assume uncorrelated
                     rho = 0;
-                    break;
                     
                 case 5:
                     // all is well
@@ -173,11 +168,160 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
         ni += 1;
     }
     
-    // close fitfile
+    // close file
     fclose(fp);
     
     // store number of images and points
     *nimg = ni;
     *npts = np;
     *pts = p;
+}
+
+void read_table(const char* filename, int* nrow, int* ncol, double** tab)
+{
+    // file handle
+    FILE* fp;
+    
+    // buffer for lines
+    char linebuf[LINELEN];
+    
+    // current cell
+    char* beg;
+    char* end;
+    
+    // number of rows
+    int nr = 0;
+    
+    // number of columns
+    int nc = 0;
+    
+    // table array
+    double* t;
+    
+    // open table file
+    fp = fopen(filename, "r");
+    if(!fp)
+    {
+        perror(filename);
+        exit(1);
+    }
+    
+    // table array must be NULL for first call to realloc
+    t = NULL;
+    
+    // read file line by line
+    for(int line = 1; fgets(linebuf, sizeof(linebuf), fp); ++line)
+    {
+        // get whole line
+        end = linebuf + strcspn(linebuf, TOK_NL);
+        
+        // make sure line was read completely
+        if(*end =='\0' && !feof(fp))
+        {
+            fprintf(stderr, "%s: line %d: line too long\n", filename, line);
+            exit(1);
+        }
+        
+        // strip newline
+        *end = '\0';
+        
+        // skip initial whitespace
+        beg = linebuf;
+        while(*beg && isspace(*beg))
+            ++beg;
+        
+        // skip commented or empty lines
+        if(*beg == '#' || *beg == '\0')
+            continue;
+        
+        // find number of columns if this is the first row
+        if(!nc)
+        {
+            char* b = beg;
+            
+            for(;; ++nc)
+            {
+                // skip initial whitespace
+                while(*b && isspace(*b))
+                    ++b;
+                
+                // check if line ended
+                if(*b == '\0')
+                    break;
+                
+                // parse number
+                strtod(b, &end);
+                
+                // check parsing
+                if(*end && !isspace(*end))
+                {
+                    fprintf(stderr, "%s: line %d: column %d: parse error",
+                            filename, line, nc+1);
+                    exit(1);
+                }
+                
+                // next column
+                b = end;
+            }
+        }
+        
+        // expand table array for row
+        t = realloc(t, (nr+1)*nc*sizeof(double));
+        if(!t)
+        {
+            perror(NULL);
+            exit(1);
+        }
+        
+        // read columns
+        for(int i = 0; i < nc; ++i)
+        {
+            // skip initial whitespace
+            while(*beg && isspace(*beg))
+                ++beg;
+            
+            // check if there is line left
+            if(*beg == '\0')
+            {
+                fprintf(stderr, "%s: line %d: too few values", filename, line);
+                exit(1);
+            }
+            
+            // parse number
+            t[nr*nc+i] = strtod(beg, &end);
+            
+            // check parsing
+            if(*end && !isspace(*end))
+            {
+                fprintf(stderr, "%s: line %d: column %d: parse error",
+                        filename, line, i+1);
+                exit(1);
+            }
+            
+            // next column
+            beg = end;
+        }
+        
+        // skip whitespace
+        while(*beg && isspace(*beg))
+            ++beg;
+        
+        // check if there is line left
+        if(*beg != '\0')
+        {
+            fprintf(stderr, "%s: line %d: too many values", filename, line);
+            exit(1);
+        }
+        
+        // new row stored
+        nr += 1;
+    }
+    
+    // close file
+    fclose(fp);
+    
+    // store table
+    *nrow = nr;
+    *ncol = nc;
+    *tab = t;
 }

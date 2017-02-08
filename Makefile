@@ -2,7 +2,7 @@
 # inventory
 ####
 
-BINARIES = ptmap regcrop regpts
+BINARIES = lens2mat mat2lens ptmap regcrop regpts
 
 
 ####
@@ -32,6 +32,12 @@ all: $(BINARIES)
 
 clean:
 	$(RM) $(BINARIES)
+
+lens2mat: src/lens2mat.c src/input.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
+
+mat2lens: src/mat2lens.c src/input.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
 ptmap: src/ptmap.c src/input.c src/newuoa.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)

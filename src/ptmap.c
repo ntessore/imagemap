@@ -412,10 +412,8 @@ int main(int argc, char* argv[])
     // print table of convergence ratios and shears
     if(v >= 0)
     {
-        printf("%4s  %8s  %8s  %8s\n", "i", "f", "g_1", "g_2");
         for(int i = 0; i < ni; ++i)
-            printf("%4d  %8.4f  %8.4f  %8.4f\n",
-                   i, p[5*i+2], p[5*i+3], p[5*i+4]);
+            printf("% 18.8f % 18.8f % 18.8f\n", p[5*i+2], p[5*i+3], p[5*i+4]);
     }
     
     // write convergence ratios and shears if asked to
