@@ -1,8 +1,17 @@
+-include local.mk
+
+
 ####
 # inventory
 ####
 
-BINARIES = lens2mat mat2lens ptmap regcrop regpts
+BINARIES = ptmap lens2mat mat2lens reg2pts
+
+ifdef HAVE_CFITSIO
+ifdef HAVE_REGIONS
+BINARIES += regcrop
+endif
+endif
 
 
 ####
@@ -45,5 +54,5 @@ ptmap: src/ptmap.c src/input.c src/newuoa.c
 regcrop: src/regcrop.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lregions -lcfitsio
 
-regpts: src/regpts.c
+reg2pts: src/reg2pts.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
