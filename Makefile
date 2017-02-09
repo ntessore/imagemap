@@ -5,9 +5,10 @@
 # inventory
 ####
 
-BINARIES = ptmap lens2mat mat2lens reg2pts
+BINARIES = lens2mat mat2lens ptmatch reg2pts
 
 ifdef HAVE_CFITSIO
+BINARIES += immap
 ifdef HAVE_REGIONS
 BINARIES += regcrop
 endif
@@ -42,13 +43,16 @@ all: $(BINARIES)
 clean:
 	$(RM) $(BINARIES)
 
+immap: src/immap.c src/input.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lcfitsio
+
 lens2mat: src/lens2mat.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
 mat2lens: src/mat2lens.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
-ptmap: src/ptmap.c src/input.c src/newuoa.c
+ptmatch: src/ptmatch.c src/input.c src/newuoa.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
 regcrop: src/regcrop.c

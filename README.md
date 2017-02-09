@@ -10,12 +10,14 @@ Contents
 
 The following tools are available.
 
+-   [**`immap`**](#immap) -
+    map reference image using relative magnification matrices
 -   [**`lens2mat`**](#lens2mat) -
     convert from lens quantities to relative magnification matrices
 -   [**`mat2lens`**](#mat2lens) -
     convert from relative magnification matrices to lens quantities
--   [**`ptmap`**](#ptmap) -
-    relative magnification matrices and lens quantities from point mapping
+-   [**`ptmatch`**](#ptmatch) -
+    relative magnification matrices and lens quantities from point matching
 -   [**`reg2pts`**](#reg2pts) -
     generate point definitions from SAOImage DS9 region files
 -   [**`regcrop`**](#regcrop) -
@@ -24,6 +26,25 @@ The following tools are available.
 
 Manual
 ------
+
+### immap
+
+map reference image using relative magnification matrices
+
+    usage: immap MATFILE IMGFITS OUTFITS
+
+The `immap` tool reads a list of relative magnification matrices from `MATFILE`
+and applies the transformation from each row to the image from `IMGFITS`. The
+mapped images are saved as a multi-extension FITS file in `OUTFITS`.
+
+The matrix file must contain rows of the form `T_11 T_12 T_21 T_22`, where the
+`T_ij` are the matrix entries. Each row corresponds to the magnification matrix
+of one additional multiple image relative to a reference image. The output will
+contain the reference image as the primary HDU (index 0), and one image-mapped
+version of the reference image for each row of the matrix file, in the same
+order. Hence the output file will contain one more multiple image than there
+are given matrices.
+
 
 ### lens2mat
 
@@ -76,13 +97,13 @@ format.
 The `-q` flag can be used to suppress output.
 
 
-### ptmap
+### ptmatch
 
-relative magnification matrices and lens quantities from point mapping
+relative magnification matrices and lens quantities from point matching
 
-    usage: ptmap [-vq] [-o OUTFILE] [-m MATFILE] FILE
+    usage: ptmatch [-vq] [-o OUTFILE] [-m MATFILE] FILE
 
-The `ptmap` tool reads a list of observed points from `FILE`, where each row
+The `ptmatch` tool reads a list of observed points from `FILE`, where each row
 corresponds to one multiple image, and the first image is the reference image.
 The tool then finds affine transformations that cause the least total distance
 squared between the transformed points of the reference image and the observed

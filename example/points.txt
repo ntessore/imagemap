@@ -1,7 +1,7 @@
 ####
 # format: point 1; point 2; point 3 [ ; point 4 ... ]
 # 
-# - at least three images and three points must be given for point mapping
+# - at least three images and three points must be given for point matching
 # - first row is the reference image, which should be the best resolved
 ####
 51.9, 49.2; 75.5, 47.6; 46.2, 72.6; 38.8, 80.0; 23.2, 79.2
