@@ -22,6 +22,8 @@ The following tools are available.
     generate point definitions from SAOImage DS9 region files
 -   [**`regcrop`**](#regcrop) -
     crop FITS files using SAOImage DS9 region files
+-   [**`srcim`**](#srcim) -
+    map observed images to source plane using lens quantities
 
 
 Manual
@@ -31,10 +33,10 @@ Manual
 
 map reference image using relative magnification matrices
 
-    usage: immap MATFILE IMGFITS OUTFITS
+    usage: immap MATFILE IMFITS OUTFITS
 
 The `immap` tool reads a list of relative magnification matrices from `MATFILE`
-and applies the transformation from each row to the image from `IMGFITS`. The
+and applies the transformation from each row to the image from `IMFITS`. The
 mapped images are saved as a multi-extension FITS file in `OUTFITS`.
 
 The matrix file must contain rows of the form `T_11 T_12 T_21 T_22`, where the
@@ -139,4 +141,23 @@ because the transformations are relative to the reference image.
 
 The `-v` and `-q` flags can be used to make the output more verbose and quiet,
 respectively.
+
+
+### srcim
+
+map observed images to source plane using lens quantities
+
+    usage: srcim OUTFITS INFILE IMFITS0 [IMFITS1 ...]
+
+The `srcim` tool reads a list of convergence ratios and shears from `INFILE`
+and applies the magnification matrix from each row to the images `IMFITSn`. The
+number of images supplied must match the number of rows in the input file, but
+individual rows can skipped by giving `--` as the image name. The source images
+are saved as a multi-extension FITS file in `OUTFITS`, where each extension is
+called `SRCn`, where `n` corresponds to the index of the input image.
+
+The input file must contain rows of the form `f g1 g2`, where each row
+corresponds to one multiple image. The magnification matrices are normalised in
+a way that the transformation of the first image has unit determinant. The
+first value for `f` can differ from unity.
 

@@ -8,7 +8,7 @@
 BINARIES = lens2mat mat2lens ptmatch reg2pts
 
 ifdef HAVE_CFITSIO
-BINARIES += immap
+BINARIES += immap srcim
 ifdef HAVE_REGIONS
 BINARIES += regcrop
 endif
@@ -60,3 +60,6 @@ regcrop: src/regcrop.c
 
 reg2pts: src/reg2pts.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
+
+srcim: src/srcim.c src/input.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lcfitsio

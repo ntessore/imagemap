@@ -78,7 +78,7 @@ int main(int argc, char* argv[])
     // check for input errors
     if(err)
     {
-        fprintf(stderr, "usage: immap MATFILE IMGFITS OUTFITS\n");
+        fprintf(stderr, "usage: immap MATFILE IMFITS OUTFITS\n");
         return EXIT_FAILURE;
     }
     
