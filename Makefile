@@ -52,7 +52,7 @@ lens2mat: src/lens2mat.c src/input.c
 mat2lens: src/mat2lens.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
-ptmatch: src/ptmatch.c src/input.c src/newuoa.c
+ptmatch: src/ptmatch.c src/input.c src/mpfit.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
 regcrop: src/regcrop.c

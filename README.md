@@ -161,3 +161,13 @@ corresponds to one multiple image. The magnification matrices are normalised in
 a way that the transformation of the first image has unit determinant. The
 first value for `f` can differ from unity.
 
+
+Copyright
+---------
+
+This project is released under the MIT license.
+
+This project includes the MPFIT algorithm, which is based on software developed
+by the University of Chicago, as Operator of Argonne National Laboratory.
+
+See the LICENSE file for additional details.

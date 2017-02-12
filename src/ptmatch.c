@@ -2,62 +2,43 @@
 #include <stdio.h>
 #include <math.h>
 
-#include "newuoa.h"
+#include "mpfit.h"
 
 #include "input.h"
 
-// initial and final radius of trust region
-static const double RBEG = 1e0;
-static const double REND = 1e-10;
-
-// maximum number of function evaluation
-static const int FLIM = 1000000;
-
-// context for optimiser
-typedef struct
-{
-    int ni;
-    int nx;
-    double* x;
-    double* a0;
-} context;
-
 // weighted distance between observed points and mapped reference points
-double mapdist(const long n, const double* p, void* ctx_)
+int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
 {
-    // get context structure
-    const context* ctx = ctx_;
-    
-    // number of images and points
-    const int ni = ctx->ni;
-    const int nx = ctx->nx;
-    const double* x = ctx->x;
+    // problem description
+    const int ni = n/5;
+    const int nx = m/(ni - 1)/2;
+    const double* x = private;
     
     // anchor point of image 0
-    const double* a0 = ctx->a0;
+    const double* a0 = p;
     
     // reference shear
-    const double g1 = p[0];
-    const double g2 = p[1];
+    const double g1 = p[3];
+    const double g2 = p[4];
     
-    // total distance between observed and mapped points
-    double dist = 0;
+    // number of deviates computed
+    int k = 0;
     
     // try to map points from image 0 to image i
     for(int i = 1; i < ni; ++i)
     {
         // anchor point of image
-        const double x0[2] = { p[5*i-3], p[5*i-2] };
+        const double x0[2] = { p[5*i+0], p[5*i+1] };
         
         // matrix coefficients
-        const double a = p[5*i-1];
-        const double b = p[5*i+0];
-        const double c = g2*a - g1*b;
-        const double d = p[5*i+1];
+        const double A = p[5*i+2];
+        const double B = p[5*i+3];
+        const double C = g2*A - g1*B;
+        const double D = p[5*i+4];
         
         // transformation matrix
-        const double T[4] = { 0.5*(d + a), 0.5*(b - c),
-                              0.5*(b + c), 0.5*(d - a) };
+        const double T[4] = { 0.5*(D + A), 0.5*(B - C),
+                              0.5*(B + C), 0.5*(D - A) };
         
         // map points, apply whitening transform and compute distance
         for(int j = 0; j < nx; ++j)
@@ -73,24 +54,81 @@ double mapdist(const long n, const double* p, void* ctx_)
                                                 0, x[5*nx*i+5*j+4] };
             
             // offset between predicted and observed position
-            const double D[2] = {
+            const double delta[2] = {
                 (xj[0] - x0[0]) - T[0]*(aj[0] - a0[0]) - T[1]*(aj[1] - a0[1]),
                 (xj[1] - x0[1]) - T[2]*(aj[0] - a0[0]) - T[3]*(aj[1] - a0[1])
             };
             
             // compute uncorrelated deviates
-            const double d[2] = {
-                W[0]*D[0] + W[1]*D[1],
-                W[2]*D[0] + W[3]*D[1]
-            };
+            d[k+0] = W[0]*delta[0] + W[1]*delta[1];
+            d[k+1] = W[2]*delta[0] + W[3]*delta[1];
             
-            // add to total distance
-            dist += d[0]*d[0] + d[1]*d[1];
+            // compute derivatives if asked to
+            if(dd)
+            {
+                // derivatives for reference shear
+                if(dd[3])
+                {
+                    dd[3][k+0] = -0.5*B*(+ W[0]*(aj[1] - a0[1])
+                                         - W[1]*(aj[0] - a0[0]));
+                    dd[3][k+1] = -0.5*B*(+ W[2]*(aj[1] - a0[1])
+                                         - W[3]*(aj[0] - a0[0]));
+                }
+                if(dd[4])
+                {
+                    dd[4][k+0] = +0.5*A*(+ W[0]*(aj[1] - a0[1])
+                                         - W[1]*(aj[0] - a0[0]));
+                    dd[4][k+1] = +0.5*A*(+ W[2]*(aj[1] - a0[1])
+                                         - W[3]*(aj[0] - a0[0]));
+                }
+                
+                // derivatives for anchor point
+                if(dd[5*i+0])
+                {
+                    dd[5*i+0][k+0] = -W[0];
+                    dd[5*i+0][k+1] = -W[2];
+                }
+                if(dd[5*i+1])
+                {
+                    dd[5*i+1][k+0] = -W[1];
+                    dd[5*i+1][k+1] = -W[3];
+                }
+                
+                // derivatives for a, b, d coefficients
+                if(dd[5*i+2])
+                {
+                    dd[5*i+2][k+0] = -0.5*(+ W[0]*(aj[0] - a0[0])
+                                           - W[0]*g2*(aj[1] - a0[1])
+                                           - W[1]*(aj[1] - a0[1])
+                                           + W[1]*g2*(aj[0] - a0[0]));
+                    dd[5*i+2][k+1] = -0.5*(+ W[2]*(aj[0] - a0[0])
+                                           - W[2]*g2*(aj[1] - a0[1])
+                                           - W[3]*(aj[1] - a0[1])
+                                           + W[3]*g2*(aj[0] - a0[0]));
+                }
+                if(dd[5*i+3])
+                {
+                    dd[5*i+3][k+0] = -0.5*(+ W[0]*(1 + g1)*(aj[1] - a0[1])
+                                           + W[1]*(1 - g1)*(aj[0] - a0[0]));
+                    dd[5*i+3][k+1] = -0.5*(+ W[2]*(1 + g1)*(aj[1] - a0[1])
+                                           + W[3]*(1 - g1)*(aj[0] - a0[0]));
+                }
+                if(dd[5*i+4])
+                {
+                    dd[5*i+4][k+0] = -0.5*(+ W[0]*(aj[0] - a0[0])
+                                           + W[1]*(aj[1] - a0[1]));
+                    dd[5*i+4][k+1] = -0.5*(+ W[2]*(aj[0] - a0[0])
+                                           + W[3]*(aj[1] - a0[1]));
+                }
+            }
+            
+            // done with deviates
+            k += 2;
         }
     }
     
-    // return the total distance
-    return dist;
+    // success if all deviates have been computed
+    return k == m ? 0 : -1;
 }
 
 int main(int argc, char* argv[])
@@ -102,21 +140,22 @@ int main(int argc, char* argv[])
     char* f;
     char* o;
     char* m;
-    int v;
+    int v, I, ND, DD;
     
     // number of images and points
-    int ni;
-    int nx;
+    int ni, nx;
     double* x;
     
     // parameters
     int np;
     double* p;
+    double* s;
     
     // optimiser data
-    int n, npt;
-    context ctx;
-    double* tmp;
+    int       nd;
+    mp_par*   par;
+    mp_config cfg = {0};
+    mp_result res = {0};
     
     
     /*********
@@ -125,7 +164,7 @@ int main(int argc, char* argv[])
     
     // default arguments
     f = o = m = NULL;
-    v = 0;
+    v = I = ND = DD = 0;
     
     // parse arguments
     err = 0;
@@ -145,6 +184,21 @@ int main(int argc, char* argv[])
                 else if(*a == 'q')
                 {
                     v -= 1;
+                }
+                // number of iterations
+                else if(*a == 'I')
+                {
+                    if(!I)
+                    {
+                        if(i + 1 < argc)
+                            I = atoi(argv[++i]);
+                        else
+                            err = 1;
+                    }
+                    else
+                    {
+                        err = 1;
+                    }
                 }
                 // output file
                 else if(*a == 'o')
@@ -176,6 +230,16 @@ int main(int argc, char* argv[])
                         err = 1;
                     }
                 }
+                // numerical derivatives (undocumented)
+                else if(*a == 'N')
+                {
+                    ND = 1;
+                }
+                // debug derivatives (undocumented)
+                else if(*a == 'D')
+                {
+                    DD = 1;
+                }
                 // unknown flag
                 else
                 {
@@ -200,8 +264,8 @@ int main(int argc, char* argv[])
     // check for input errors
     if(err)
     {
-        fprintf(stderr,
-                "usage: ptmatch [-vq] [-o OUTFILE] [-m MATFILE] FILE\n");
+        fprintf(stderr, "usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] "
+                "[-m MATFILE] FILE\n");
         return EXIT_FAILURE;
     }
     
@@ -255,28 +319,16 @@ int main(int argc, char* argv[])
     // total number of parameters, including fixed ones
     np = 5*ni;
     
-    // create array for parameters
+    // create arrays for parameters and uncertainties
     p = malloc(np*sizeof(double));
-    if(!p)
+    s = malloc(np*sizeof(double));
+    if(!p || !s)
     {
         perror(NULL);
         return EXIT_FAILURE;
     }
     
-    // set anchor point to centroid of points for each image
-    for(int i = 0; i < ni; ++i)
-    {
-        double c[2] = { 0, 0 };
-        for(int j = 0; j < nx; ++j)
-        {
-            c[0] += x[nx*5*i+5*j+0];
-            c[1] += x[nx*5*i+5*j+1];
-        }
-        p[5*i+0] = c[0]/nx;
-        p[5*i+1] = c[1]/nx;
-    }
-    
-    // compute a,b,d coefficients from given points
+    // compute a,b,c,d coefficients from given points
     for(int i = 1; i < ni; ++i)
     {
         // displacements from first three points in image 0
@@ -308,40 +360,86 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
         
-        // store a,b,d coefficients for matrix
+        // store c,a,b,d coefficients for matrix
+        p[5*i+1] = T[2] - T[1];
         p[5*i+2] = T[0] - T[3];
         p[5*i+3] = T[2] + T[1];
         p[5*i+4] = T[0] + T[3];
-        
-        // store c coefficient for images 1 and 2 only
-        if(i < 3)
-            p[2+i] = T[2] - T[1];
     }
     
-    // convergence ratio for image 0 is unity by definition
+    // convergence ratio for image 0 is fixed to unity
     p[2] = 1;
     
-    // compute shear for image 0 from a,b,c coefficients of images 1 and 2
+    // average initial shear from all pairs of multiple images
+    p[3] = 0;
+    p[4] = 0;
+    
+    // compute mean reference shear from a,b,c coefficients of images
+    for(int i = 1, n = 0; i < ni; ++i)
     {
-        // stored a, b, c coefficients of images 1 and 2
-        const double a1 = p[5*1+2];
-        const double b1 = p[5*1+3];
-        const double c1 = p[2+1];
-        const double a2 = p[5*2+2];
-        const double b2 = p[5*2+3];
-        const double c2 = p[2+2];
+        // a, b, c coefficients of image i
+        const double ci = p[5*i+1];
+        const double ai = p[5*i+2];
+        const double bi = p[5*i+3];
         
-        // compute g for reference image 0
-        p[3] = (a1*c2 - a2*c1)/(b1*a2 - b2*a1);
-        p[4] = (b1*c2 - b2*c1)/(b1*a2 - b2*a1);
-        
-        // make sure that initial shear is sane
-        if(!isfinite(p[3]) || !isfinite(p[4]))
+        // go through pairs of images i, j
+        for(int j = i + 1; j < ni; ++j)
         {
-            fprintf(stderr, "%s: images 1 and 2 do not generate a valid "
-                    "shear\n", f);
-            return EXIT_FAILURE;
+            // a, b, c coefficients of image j
+            const double cj = p[5*j+1];
+            const double aj = p[5*j+2];
+            const double bj = p[5*j+3];
+            
+            // compute reference shear from images i, j
+            const double g1 = (ai*cj - aj*ci)/(bi*aj - bj*ai);
+            const double g2 = (bi*cj - bj*ci)/(bi*aj - bj*ai);
+            
+            // update mean if shear from i, j is sane
+            if(isfinite(g1) && isfinite(g2))
+            {
+                const double x1 = g1 - p[3];
+                const double x2 = g2 - p[4];
+                
+                n += 1;
+                p[3] += x1/n;
+                p[4] += x2/n;
+                s[3] += x1*(g1 - p[3]);
+                s[4] += x2*(g2 - p[4]);
+            }
         }
+    }
+    
+    // output initial shear and a,b,d coefficients if very very verbose
+    if(v >= 2)
+    {
+        printf("initial reference shear:\n");
+        printf("  g1  % 10.4f  % 10.4f\n", p[3], sqrt(s[3]*2/ni/(ni-3)));
+        printf("  g2  % 10.4f  % 10.4f\n", p[4], sqrt(s[4]*2/ni/(ni-3)));
+        printf("initial a,b,d coefficients:\n");
+        for(int i = 1; i < ni; ++i)
+            printf("  %-#3.0f % 10.4f  % 10.4f  % 10.4f\n",
+                   1.*i, p[5*i+2], p[5*i+3], p[5*i+4]);
+    }
+    
+    // set anchor point to centroid of points for each image
+    for(int i = 0; i < ni; ++i)
+    {
+        double c[2] = { 0, 0 };
+        for(int j = 0; j < nx; ++j)
+        {
+            c[0] += x[nx*5*i+5*j+0];
+            c[1] += x[nx*5*i+5*j+1];
+        }
+        p[5*i+0] = c[0]/nx;
+        p[5*i+1] = c[1]/nx;
+    }
+    
+    // output initial anchor points if very very verbose
+    if(v >= 2)
+    {
+        printf("initial anchor points:\n");
+        for(int i = 0; i < ni; ++i)
+            printf("  %-#3.0f % 10.4f  % 10.4f\n", 1.*i, p[5*i+0], p[5*i+1]);
     }
     
     
@@ -349,35 +447,136 @@ int main(int argc, char* argv[])
      * minimise *
      ************/
     
-    // dimensionality of problem and interpolation
-    n = np - 3;
-    npt = 2*n + 1;
+    // number of data points
+    nd = 2*nx*(ni - 1);
     
-    // set up data structure
-    ctx.ni = ni;
-    ctx.nx = nx;
-    ctx.x  = x;
-    ctx.a0 = p;
-    
-    // allocate scratch space
-    tmp = malloc(((npt+13)*(npt+n)+3*n*(n+3)/2)*sizeof(double));
-    if(!tmp)
+    // parameter configuration
+    par = calloc(np, sizeof(mp_par));
+    if(!par)
     {
         perror(NULL);
         return EXIT_FAILURE;
     }
     
-    // minimise weighted distance between observed and mapped points
-    err = newuoa(n, npt, mapdist, &ctx, &p[3], RBEG, REND, v, FLIM, tmp);
+    // fix reference image anchor point and convergence ratio
+    par[0].fixed = 1;
+    par[1].fixed = 1;
+    par[2].fixed = 1;
     
-    // free scratch space
-    free(tmp);
-    
-    // make sure call was successful
-    if(err != NEWUOA_SUCCESS)
+    // set up other parameters
+    for(int i = 3; i < np; ++i)
     {
-        fprintf(stderr, "error in NEWUOA: %s\n", newuoa_reason(err));
+        // numerical or analytical derivatives
+        par[i].side = ND ? 0 : 3;
+        
+        // debug derivatives
+        par[i].deriv_debug = DD;
+    }
+    
+    // MPFIT configuration
+    cfg.maxiter = I;
+    cfg.nprint  = (v >= 2 ? 1 : 0);
+    
+    // set up results structure
+    res.xerror = s;
+    
+    // minimise weighted distance between observed and mapped points
+    err = mpfit(mapdist, nd, np, p, par, &cfg, x, &res);
+    
+    // check for errors
+    if(err <= 0)
+    {
+        const char* msg = NULL;
+        switch(err)
+        {
+            case MP_ERR_INPUT:
+                msg = "General input parameter error";
+                break;
+            case MP_ERR_NAN:
+                msg = "User function produced non-finite values";
+                break;
+            case MP_ERR_FUNC:
+                msg = "No user function was supplied";
+                break;
+            case MP_ERR_NPOINTS:
+                msg = "No user data points were supplied";
+                break;
+            case MP_ERR_NFREE:
+                msg = "No free parameters";
+                break;
+            case MP_ERR_MEMORY:
+                msg = "Memory allocation error";
+                break;
+            case MP_ERR_INITBOUNDS:
+                msg = "Initial values inconsistent w constraint";
+                break;
+            case MP_ERR_BOUNDS:
+                msg = "Initial constraints inconsistent";
+                break;
+            case MP_ERR_PARAM:
+                msg = "General input parameter error";
+                break;
+            case MP_ERR_DOF:
+                msg = "Not enough degrees of freedom";
+                break;
+        }
+        if(msg)
+            fprintf(stderr, "MPFIT error: %s \n", msg);
+        else
+            fprintf(stderr, "MPFIT error: %d \n", err);
         return EXIT_FAILURE;
+    }
+    
+    // output convergence reason if verbose
+    if(v >= 1)
+    {
+        const char* msg = NULL;
+        switch(err)
+        {
+            case MP_OK_CHI:
+                msg = "Convergence in chi-square value";
+                break;
+            case MP_OK_PAR:
+                msg = "Convergence in parameter value";
+                break;
+            case MP_OK_BOTH:
+                msg = "Both MP_OK_PAR and MP_OK_CHI hold";
+                break;
+            case MP_OK_DIR:
+                msg = "Convergence in orthogonality";
+                break;
+            case MP_MAXITER:
+                msg = "Maximum number of iterations reached";
+                break;
+            case MP_FTOL:
+                msg = "ftol is too small; no further improvement";
+                break;
+            case MP_XTOL:
+                msg = "xtol is too small; no further improvement";
+                break;
+            case MP_GTOL:
+                msg = "gtol is too small; no further improvement";
+                break;
+        }
+        if(msg)
+            fprintf(stderr, "MPFIT success: %s \n", msg);
+        else
+            fprintf(stderr, "MPFIT success: %d \n", err);
+    }
+    
+    // output results structure if very verbose
+    if(v >= 2)
+    {
+        printf("MPFIT results:\n");
+        printf("  bestnorm  = %16f\n", res.bestnorm);
+        printf("  orignorm  = %16f\n", res.orignorm);
+        printf("  niter     = %16d\n", res.niter);
+        printf("  nfev      = %16d\n", res.nfev);
+        printf("  status    = %16d\n", res.status);
+        printf("  npar      = %16d\n", res.npar);
+        printf("  nfree     = %16d\n", res.nfree);
+        printf("  npegged   = %16d\n", res.npegged);
+        printf("  nfunc     = %16d\n", res.nfunc);
     }
     
     
@@ -413,8 +612,13 @@ int main(int argc, char* argv[])
     // print table of convergence ratios and shears
     if(v >= 0)
     {
+        printf("        %10s  %10s\n", "ML", "sigma");
         for(int i = 0; i < ni; ++i)
-            printf("% 18.8f % 18.8f % 18.8f\n", p[5*i+2], p[5*i+3], p[5*i+4]);
+        {
+            printf("%-#3.0f  f  % 10.4f  % 10.4f\n", 1.*i, p[5*i+2], s[5*i+2]);
+            printf("    g1  % 10.4f  % 10.4f\n", p[5*i+3], s[5*i+3]);
+            printf("    g2  % 10.4f  % 10.4f\n", p[5*i+4], s[5*i+4]);
+        }
     }
     
     // write convergence ratios and shears if asked to
@@ -480,6 +684,8 @@ int main(int argc, char* argv[])
     
     free(x);
     free(p);
+    free(s);
+    free(par);
     
     
     /********
