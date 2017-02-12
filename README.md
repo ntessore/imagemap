@@ -167,7 +167,7 @@ Copyright
 
 This project is released under the MIT license.
 
-This project includes the MPFIT algorithm, which is based on software developed
-by the University of Chicago, as Operator of Argonne National Laboratory.
+This project includes the MPFIT algorithm (based on software developed by the
+University of Chicago, as Operator of Argonne National Laboratory).
 
-See the LICENSE file for additional details.
+See the LICENSE and DISCLAIMER files for additional details.
