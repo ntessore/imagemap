@@ -592,16 +592,16 @@ int main(int argc, char* argv[])
         const double g2 = p[4];
         
         // a,b,c,d coefficients for image
-        const double a = p[5*i+2];
-        const double b = p[5*i+3];
-        const double c = g2*a - g1*b;
-        const double d = p[5*i+4];
+        const double A = p[5*i+2];
+        const double B = p[5*i+3];
+        const double C = g2*A - g1*B;
+        const double D = p[5*i+4];
         
         // numerator and denominator for f and g
-        const double J = 0.5*(c*c + d*d - a*a - b*b);
-        const double P = d*g1 - c*g2 + a;
-        const double Q = c*g1 + d*g2 + b;
-        const double R = a*g1 + b*g2 + d;
+        const double J = 0.5*(C*C + D*D - A*A - B*B);
+        const double P = D*g1 - C*g2 + A;
+        const double Q = C*g1 + D*g2 + B;
+        const double R = A*g1 + B*g2 + D;
         
         // store initial f,g1,g2 for image
         p[5*i+2] = J/R;
