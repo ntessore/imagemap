@@ -153,8 +153,9 @@ The `srcim` tool reads a list of convergence ratios and shears from `INFILE`
 and applies the magnification matrix from each row to the images `IMFITSn`. The
 number of images supplied must match the number of rows in the input file, but
 individual rows can skipped by giving `--` as the image name. The source images
-are saved as a multi-extension FITS file in `OUTFITS`, where each extension is
-called `SRCn`, where `n` corresponds to the index of the input image.
+are saved as a multi-extension FITS file in `OUTFITS`. The indexing of the FITS
+extensions always matches the rows of the input files, and empty extensions are
+written when individual images are skipped.
 
 The input file must contain rows of the form `f g1 g2`, where each row
 corresponds to one multiple image. The magnification matrices are normalised in

@@ -47,6 +47,7 @@ int main(int argc, char* argv[])
     double C[4][2], X[2], Y[2];
     
     // source image
+    int NA;
     long N[2];
     long nsrc;
     double* src;
@@ -121,16 +122,6 @@ int main(int argc, char* argv[])
     // create FITS file
     fits_create_file(&outfits, o, &err);
     
-    // write primary HDU
-    fits_create_img(outfits, SHORT_IMG, 0, NULL, &err);
-    
-    // record file origin
-    fits_write_key(outfits, TSTRING,
-                   "ORIGIN", "srcim", "FITS file originator", &err);
-    
-    // record the date of FITS creation
-    fits_write_date(outfits, &err);
-    
     // check for FITS creation errors
     if(err)
         fits_error(o, err);
@@ -157,117 +148,143 @@ int main(int argc, char* argv[])
         
         // check whether to skip image
         if(strcmp(img[i], "--") == 0)
-            continue;
-        
-        // open input FITS file
-        fits_open_image(&infits, img[i], READONLY, &err);
-        fits_get_img_dim(infits, &na, &err);
-        fits_get_img_size(infits, 2, n, &err);
-        
-        // check for errors
-        if(err)
-            fits_error(img[i], err);
-        
-        // make sure the image is an image
-        if(na != 2)
-            fits_error(img[i], BAD_DIMEN);
-        
-        // array for image pixels
-        npix = n[0]*n[1];
-        pix = malloc(npix*sizeof(double));
-        if(!pix)
         {
-            perror(img[i]);
-            return EXIT_FAILURE;
+            // empty image extension for this source image
+            NA = 0;
+            N[0] = 0;
+            N[1] = 0;
         }
-        
-        // read pixels into array and close file
-        fits_read_pix(infits, TDOUBLE, fpix, npix, NULL, pix, NULL, &err);
-        fits_close_file(infits, &err);
-        
-        // check for errors
-        if(err)
-            fits_error(img[i], err);
-        
-        // map image corners
-        C[0][0] = 0;
-        C[0][1] = 0;
-        C[1][0] = A[0]*n[0];
-        C[1][1] = A[2]*n[0];
-        C[2][0] = A[1]*n[1];
-        C[2][1] = A[3]*n[1];
-        C[3][0] = A[0]*n[0] + A[1]*n[1];
-        C[3][1] = A[2]*n[0] + A[3]*n[1];
-        
-        // get source image bounding box
-        X[0] = fmin(C[0][0], fmin(C[1][0], fmin(C[2][0], C[3][0])));
-        X[1] = fmin(C[0][1], fmin(C[1][1], fmin(C[2][1], C[3][1])));
-        Y[0] = fmax(C[0][0], fmax(C[1][0], fmax(C[2][0], C[3][0])));
-        Y[1] = fmax(C[0][1], fmax(C[1][1], fmax(C[2][1], C[3][1])));
-        
-        // get source image size
-        N[0] = ceil(Y[0] - X[0]) + 0.5;
-        N[1] = ceil(Y[1] - X[1]) + 0.5;
-        
-        // array for source pixels
-        nsrc = N[0]*N[1];
-        src = calloc(nsrc, sizeof(double));
-        if(!src)
+        else
         {
-            perror(img[i]);
-            return EXIT_FAILURE;
-        }
-        
-        // map image to source plane
-        for(int j = 0, k = 0; j < n[1]; ++j)
-        for(int i = 0; i < n[0]; ++i, ++k)
-        {
-            // pixel value
-            const double f = (1./NSUB/NSUB)*det*pix[k];
+            // open input FITS file
+            fits_open_image(&infits, img[i], READONLY, &err);
+            fits_get_img_dim(infits, &na, &err);
+            fits_get_img_size(infits, 2, n, &err);
             
-            // subsampling
-            for(long t = 0; t < NSUB; ++t)
-            for(long s = 0; s < NSUB; ++s)
+            // check for errors
+            if(err)
+                fits_error(img[i], err);
+            
+            // make sure the image is an image
+            if(na != 2)
+                fits_error(img[i], BAD_DIMEN);
+            
+            // array for image pixels
+            npix = n[0]*n[1];
+            pix = malloc(npix*sizeof(double));
+            if(!pix)
             {
-                // position in image coordinate system
-                const double dx = i - 0.5 + (s + 0.5)/NSUB;
-                const double dy = j - 0.5 + (t + 0.5)/NSUB;
+                perror(img[i]);
+                return EXIT_FAILURE;
+            }
+            
+            // read pixels into array and close file
+            fits_read_pix(infits, TDOUBLE, fpix, npix, NULL, pix, NULL, &err);
+            fits_close_file(infits, &err);
+            
+            // check for errors
+            if(err)
+                fits_error(img[i], err);
+            
+            // map image corners
+            C[0][0] = 0;
+            C[0][1] = 0;
+            C[1][0] = A[0]*n[0];
+            C[1][1] = A[2]*n[0];
+            C[2][0] = A[1]*n[1];
+            C[2][1] = A[3]*n[1];
+            C[3][0] = A[0]*n[0] + A[1]*n[1];
+            C[3][1] = A[2]*n[0] + A[3]*n[1];
+            
+            // get source image bounding box
+            X[0] = fmin(C[0][0], fmin(C[1][0], fmin(C[2][0], C[3][0])));
+            X[1] = fmin(C[0][1], fmin(C[1][1], fmin(C[2][1], C[3][1])));
+            Y[0] = fmax(C[0][0], fmax(C[1][0], fmax(C[2][0], C[3][0])));
+            Y[1] = fmax(C[0][1], fmax(C[1][1], fmax(C[2][1], C[3][1])));
+            
+            // two dimensions for image
+            NA = 2;
+            
+            // get source image size
+            N[0] = ceil(Y[0] - X[0]) + 0.5;
+            N[1] = ceil(Y[1] - X[1]) + 0.5;
+            
+            // array for source pixels
+            nsrc = N[0]*N[1];
+            src = calloc(nsrc, sizeof(double));
+            if(!src)
+            {
+                perror(img[i]);
+                return EXIT_FAILURE;
+            }
+            
+            // map image to source plane
+            for(int j = 0, k = 0; j < n[1]; ++j)
+            for(int i = 0; i < n[0]; ++i, ++k)
+            {
+                // pixel value
+                const double f = (1./NSUB/NSUB)*det*pix[k];
                 
-                // position in source coordinate system
-                const double x = A[0]*dx + A[1]*dy - X[0];
-                const double y = A[2]*dx + A[3]*dy - X[1];
-                
-                // convert to array indices
-                const int u = x - 0.5;
-                const int v = y - 0.5;
-                
-                // ignore out of bounds pixels
-                if(x < 0.5 || x >= N[0] + 0.5 || y < 0.5 || y >= N[1] + 0.5)
-                    continue;
-                
-                // map pixel to source
-                src[v*N[0]+u] += f;
+                // subsampling
+                for(long t = 0; t < NSUB; ++t)
+                for(long s = 0; s < NSUB; ++s)
+                {
+                    // position in image coordinate system
+                    const double dx = i - 0.5 + (s + 0.5)/NSUB;
+                    const double dy = j - 0.5 + (t + 0.5)/NSUB;
+                    
+                    // position in source coordinate system
+                    const double x = A[0]*dx + A[1]*dy - X[0];
+                    const double y = A[2]*dx + A[3]*dy - X[1];
+                    
+                    // convert to array indices
+                    const int u = x - 0.5;
+                    const int v = y - 0.5;
+                    
+                    // ignore out of bounds pixels
+                    if(x < 0.5 || x >= N[0] + 0.5 ||
+                       y < 0.5 || y >= N[1] + 0.5)
+                        continue;
+                    
+                    // map pixel to source
+                    src[v*N[0]+u] += f;
+                }
             }
         }
         
         // create image extension for source in output file
-        fits_create_img(outfits, DOUBLE_IMG, 2, N, &err);
+        fits_create_img(outfits, DOUBLE_IMG, NA, N, &err);
+        
+        // metadata for primary HDU
+        if(i == 0)
+        {
+            // record file origin
+            fits_write_key(outfits, TSTRING, "ORIGIN", "srcim",
+                           "FITS file originator", &err);
+            
+            // record the date of FITS creation
+            fits_write_date(outfits, &err);
+        }
         
         // set extension name
         snprintf(extname, sizeof(extname), "SRC%d", i);
         fits_write_key(outfits, TSTRING,
                        "EXTNAME", extname, "extension name", &err);
         
-        // write source image
-        fits_write_pix(outfits, TDOUBLE, fpix, nsrc, src, &err);
+        // process source pixels if not skipped
+        if(NA != 0)
+        {
+            // write source image
+            fits_write_pix(outfits, TDOUBLE, fpix, nsrc, src, &err);
+            
+            // done with pixels
+            free(pix);
+            free(src);
+        }
         
         // check for errors
         if(err)
             fits_error(o, err);
-        
-        // done with pixels
-        free(pix);
-        free(src);
     }
     
     // close output FITS file
