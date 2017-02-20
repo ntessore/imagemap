@@ -140,6 +140,7 @@ int main(int argc, char* argv[])
     char* f;
     char* o;
     char* m;
+    char* a;
     int v, I, ND, DD;
     
     // number of images and points
@@ -163,7 +164,7 @@ int main(int argc, char* argv[])
      *********/
     
     // default arguments
-    f = o = m = NULL;
+    f = o = m = a = NULL;
     v = I = ND = DD = 0;
     
     // parse arguments
@@ -173,20 +174,20 @@ int main(int argc, char* argv[])
         if(argv[i][0] == '-')
         {
             // flags
-            for(char* a = &argv[i][1]; *a; ++a)
+            for(char* c = &argv[i][1]; *c; ++c)
             {
                 // increase verbosity
-                if(*a == 'v')
+                if(*c == 'v')
                 {
                     v += 1;
                 }
                 // decrease verbosity
-                else if(*a == 'q')
+                else if(*c == 'q')
                 {
                     v -= 1;
                 }
                 // number of iterations
-                else if(*a == 'I')
+                else if(*c == 'I')
                 {
                     if(!I)
                     {
@@ -201,7 +202,7 @@ int main(int argc, char* argv[])
                     }
                 }
                 // output file
-                else if(*a == 'o')
+                else if(*c == 'o')
                 {
                     if(!o)
                     {
@@ -216,7 +217,7 @@ int main(int argc, char* argv[])
                     }
                 }
                 // output matrix file
-                else if(*a == 'm')
+                else if(*c == 'm')
                 {
                     if(!m)
                     {
@@ -230,13 +231,28 @@ int main(int argc, char* argv[])
                         err = 1;
                     }
                 }
+                // output anchor file
+                else if(*c == 'a')
+                {
+                    if(!a)
+                    {
+                        if(i + 1 < argc)
+                            a = argv[++i];
+                        else
+                            err = 1;
+                    }
+                    else
+                    {
+                        err = 1;
+                    }
+                }
                 // numerical derivatives (undocumented)
-                else if(*a == 'N')
+                else if(*c == 'N')
                 {
                     ND = 1;
                 }
                 // debug derivatives (undocumented)
-                else if(*a == 'D')
+                else if(*c == 'D')
                 {
                     DD = 1;
                 }
@@ -265,7 +281,7 @@ int main(int argc, char* argv[])
     if(err)
     {
         fprintf(stderr, "usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] "
-                "[-m MATFILE] FILE\n");
+                "[-m MATFILE] [-a ANCFILE] PTSFILE\n");
         return EXIT_FAILURE;
     }
     
@@ -674,6 +690,25 @@ int main(int argc, char* argv[])
         }
         
         // done writing transforms
+        fclose(fp);
+    }
+    
+    // write anchor points if asked to
+    if(a)
+    {
+        // open anchor file for writing
+        FILE* fp = fopen(a, "w");
+        if(!fp)
+        {
+            perror(m);
+            return EXIT_FAILURE;
+        }
+        
+        // write anchor points
+        for(int i = 0; i < ni; ++i)
+            fprintf(fp, "% 18.8f % 18.8f\n", p[5*i+0], p[5*i+1]);
+        
+        // done with anchor points file
         fclose(fp);
     }
     

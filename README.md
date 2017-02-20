@@ -103,13 +103,14 @@ The `-q` flag can be used to suppress output.
 
 relative magnification matrices and lens quantities from point matching
 
-    usage: ptmatch [-vq] [-o OUTFILE] [-m MATFILE] FILE
+    usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] [-m MATFILE] [-a ANCFILE]
+                   PTSFILE
 
-The `ptmatch` tool reads a list of observed points from `FILE`, where each row
-corresponds to one multiple image, and the first image is the reference image.
-The tool then finds affine transformations that cause the least total distance
-squared between the transformed points of the reference image and the observed
-points in the other multiple images.
+The `ptmatch` tool reads a list of observed points from `PTSFILE`, where each
+row corresponds to one multiple image, and the first image is the reference
+image. The tool then finds affine transformations that cause the least total
+distance squared between the transformed points of the reference image and the
+observed points in the other multiple images.
 
 The input file format is
 
@@ -122,25 +123,34 @@ point is
 
 where at least the position `x, y` must be given. The uncertainty of the point
 is given by the optional covariance `dx, dy, rho`, where `dx = 1px`, `dy = dx`
-and `rho = 0` is assumed by default. Uncertainties for the reference image are
+and `rho = 0` are assumed by default. Uncertainties for the reference image are
 ignored. An example point definition file [is available](example/points.txt).
 The [`reg2pts`](#re2pts) tool can be used to generate point definitions and
 uncertainties from SAOImage DS9 region files.
 
-From these transformations, the convergence ratios `f` and reduced shears `g`
-are computed and printed in the form `f g1 g2`, where each row corresponds to
-the images as given in the input file.
+From these transformations, the best-fit convergence ratios `f` and reduced
+shears `g` are computed and printed for each image, together with the estimated
+uncertainty of the result.
 
-If the `-o` flag is given, results for `f` and `g` are written to `OUTFILE`
-using the same format.
+The `-v` and `-q` flags can be used to make the output more verbose and quiet,
+respectively.
+
+The maximum number of iterations of the fit routine can be set with the `-I`
+flag. The default value is 200. Convergence of the fit can be checked using
+verbose output (see above).
+
+If the `-o` flag is given, results for `f` and `g` are written to `OUTFILE` in
+the form `f g1 g2`, where each row corresponds to the images as given in the
+input file.
 
 If the `-m` flag is given, the relative magnification matrices are written to
 `MATFILE` in the form `T_11 T_12 T_21 T_22`, where `T_ij` are the matrix
 entries. The total number of rows will be one less than the number of images,
 because the transformations are relative to the reference image.
 
-The `-v` and `-q` flags can be used to make the output more verbose and quiet,
-respectively.
+If the `-a` flag is given, the anchor points of the best-fit affine transforms
+are written to `ANCFILE` in the form `x y`, where each row corresponds to the
+multiple image defined in the input file.
 
 
 ### srcim
