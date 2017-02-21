@@ -619,7 +619,7 @@ int main(int argc, char* argv[])
         const double Q = C*g1 + D*g2 + B;
         const double R = A*g1 + B*g2 + D;
         
-        // store initial f,g1,g2 for image
+        // compute f, g1, g2 for image
         p[5*i+2] = J/R;
         p[5*i+3] = P/R;
         p[5*i+4] = Q/R;
@@ -628,13 +628,8 @@ int main(int argc, char* argv[])
     // print table of convergence ratios and shears
     if(v >= 0)
     {
-        printf("        %10s  %10s\n", "ML", "sigma");
         for(int i = 0; i < ni; ++i)
-        {
-            printf("%-#3.0f  f  % 10.4f  % 10.4f\n", 1.*i, p[5*i+2], s[5*i+2]);
-            printf("    g1  % 10.4f  % 10.4f\n", p[5*i+3], s[5*i+3]);
-            printf("    g2  % 10.4f  % 10.4f\n", p[5*i+4], s[5*i+4]);
-        }
+            printf("% 18.8f % 18.8f % 18.8f\n", p[5*i+2], p[5*i+3], p[5*i+4]);
     }
     
     // write convergence ratios and shears if asked to
