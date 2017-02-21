@@ -3,8 +3,11 @@
 #include <math.h>
 
 #include "mpfit.h"
-
 #include "input.h"
+
+const char* USAGE =
+"usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] [-m MATFILE] [-a ANCFILE]\n"
+"               PTSFILE";
 
 // weighted distance between observed points and mapped reference points
 int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
@@ -133,15 +136,16 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
 
 int main(int argc, char* argv[])
 {
-    // error indicator
-    int err;
+    // error indicator and message
+    int err = 0;
+    const char* msg = NULL;
     
     // input
-    char* f;
-    char* o;
-    char* m;
-    char* a;
-    int v, I, ND, DD;
+    char* ptsfile;
+    char* outfile;
+    char* matfile;
+    char* ancfile;
+    int v, maxiter, ND, DD;
     
     // number of images and points
     int ni, nx;
@@ -150,7 +154,7 @@ int main(int argc, char* argv[])
     // parameters
     int np;
     double* p;
-    double* s;
+    double* cov;
     
     // optimiser data
     int       nd;
@@ -164,11 +168,10 @@ int main(int argc, char* argv[])
      *********/
     
     // default arguments
-    f = o = m = a = NULL;
-    v = I = ND = DD = 0;
+    ptsfile = outfile = matfile = ancfile = NULL;
+    v = maxiter = ND = DD = 0;
     
     // parse arguments
-    err = 0;
     for(int i = 1; i < argc && !err; ++i)
     {
         if(argv[i][0] == '-')
@@ -189,62 +192,34 @@ int main(int argc, char* argv[])
                 // number of iterations
                 else if(*c == 'I')
                 {
-                    if(!I)
-                    {
-                        if(i + 1 < argc)
-                            I = atoi(argv[++i]);
-                        else
-                            err = 1;
-                    }
+                    if(!maxiter && i + 1 < argc)
+                        maxiter = atoi(argv[++i]);
                     else
-                    {
                         err = 1;
-                    }
                 }
                 // output file
                 else if(*c == 'o')
                 {
-                    if(!o)
-                    {
-                        if(i + 1 < argc)
-                            o = argv[++i];
-                        else
-                            err = 1;
-                    }
+                    if(!outfile && i + 1 < argc)
+                        outfile = argv[++i];
                     else
-                    {
                         err = 1;
-                    }
                 }
                 // output matrix file
                 else if(*c == 'm')
                 {
-                    if(!m)
-                    {
-                        if(i + 1 < argc)
-                            m = argv[++i];
-                        else
-                            err = 1;
-                    }
+                    if(!matfile && i + 1 < argc)
+                        matfile = argv[++i];
                     else
-                    {
                         err = 1;
-                    }
                 }
                 // output anchor file
                 else if(*c == 'a')
                 {
-                    if(!a)
-                    {
-                        if(i + 1 < argc)
-                            a = argv[++i];
-                        else
-                            err = 1;
-                    }
+                    if(!ancfile && i + 1 < argc)
+                        ancfile = argv[++i];
                     else
-                    {
                         err = 1;
-                    }
                 }
                 // numerical derivatives (undocumented)
                 else if(*c == 'N')
@@ -266,39 +241,35 @@ int main(int argc, char* argv[])
         else
         {
             // positional arguments
-            if(!f)
-                f = argv[i];
+            if(!ptsfile)
+                ptsfile = argv[i];
             else
                 err = 1;
         }
     }
     
     // make sure input file was given
-    if(!f)
+    if(!ptsfile)
         err = 1;
     
     // check for input errors
     if(err)
-    {
-        fprintf(stderr, "usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] "
-                "[-m MATFILE] [-a ANCFILE] PTSFILE\n");
-        return EXIT_FAILURE;
-    }
+        goto err_usage;
     
     // read points from input file
-    read_points(f, &ni, &nx, &x);
+    read_points(ptsfile, &ni, &nx, &x);
     
     // make sure that enough images were given
     if(ni < 3)
     {
-        fprintf(stderr, "%s: needs at least three images\n", f);
+        fprintf(stderr, "%s: needs at least three images\n", ptsfile);
         return EXIT_FAILURE;
     }
     
     // make sure that enough points were given
     if(nx < 3)
     {
-        fprintf(stderr, "%s: needs at least three points\n", f);
+        fprintf(stderr, "%s: needs at least three points\n", ptsfile);
         return EXIT_FAILURE;
     }
     
@@ -316,7 +287,7 @@ int main(int argc, char* argv[])
             if(s1 < 0 || s2 < 0 || rho*rho >= 1)
             {
                 fprintf(stderr, "%s: invalid covariance matrix for point %d "
-                        "of image %d\n", f, j, i);
+                        "of image %d\n", ptsfile, j, i);
                 return EXIT_FAILURE;
             }
             
@@ -335,14 +306,11 @@ int main(int argc, char* argv[])
     // total number of parameters, including fixed ones
     np = 5*ni;
     
-    // create arrays for parameters and uncertainties
+    // create arrays for parameters and covariance matrix
     p = malloc(np*sizeof(double));
-    s = malloc(np*sizeof(double));
-    if(!p || !s)
-    {
-        perror(NULL);
-        return EXIT_FAILURE;
-    }
+    cov = malloc(np*np*sizeof(double));
+    if(!p || !cov)
+        goto err_malloc;
     
     // compute a,b,c,d coefficients from given points
     for(int i = 1; i < ni; ++i)
@@ -372,7 +340,7 @@ int main(int argc, char* argv[])
            !isfinite(T[2]) || !isfinite(T[3]))
         {
             fprintf(stderr, "%s: points of image %d do not generate a "
-                    "transformation matrix\n", f, i);
+                    "transformation matrix\n", ptsfile, i);
             return EXIT_FAILURE;
         }
         
@@ -419,22 +387,8 @@ int main(int argc, char* argv[])
                 n += 1;
                 p[3] += x1/n;
                 p[4] += x2/n;
-                s[3] += x1*(g1 - p[3]);
-                s[4] += x2*(g2 - p[4]);
             }
         }
-    }
-    
-    // output initial shear and a,b,d coefficients if very very verbose
-    if(v >= 2)
-    {
-        printf("initial reference shear:\n");
-        printf("  g1  % 10.4f  % 10.4f\n", p[3], sqrt(s[3]*2/ni/(ni-3)));
-        printf("  g2  % 10.4f  % 10.4f\n", p[4], sqrt(s[4]*2/ni/(ni-3)));
-        printf("initial a,b,d coefficients:\n");
-        for(int i = 1; i < ni; ++i)
-            printf("  %-#3.0f % 10.4f  % 10.4f  % 10.4f\n",
-                   1.*i, p[5*i+2], p[5*i+3], p[5*i+4]);
     }
     
     // set anchor point to centroid of points for each image
@@ -450,12 +404,17 @@ int main(int argc, char* argv[])
         p[5*i+1] = c[1]/nx;
     }
     
-    // output initial anchor points if very very verbose
-    if(v >= 2)
+    // output initial parameter guess if very verbose
+    if(v > 1)
     {
-        printf("initial anchor points:\n");
+        printf("initial parameters:\n");
         for(int i = 0; i < ni; ++i)
-            printf("  %-#3.0f % 10.4f  % 10.4f\n", 1.*i, p[5*i+0], p[5*i+1]);
+        {
+            printf(" %#3.0f", 1.*i);
+            for(int j = 0; j < 5; ++j)
+                printf("  % 10.4f", p[5*i+j]);
+            printf("\n");
+        }
     }
     
     
@@ -469,10 +428,7 @@ int main(int argc, char* argv[])
     // parameter configuration
     par = calloc(np, sizeof(mp_par));
     if(!par)
-    {
-        perror(NULL);
-        return EXIT_FAILURE;
-    }
+        goto err_malloc;
     
     // fix reference image anchor point and convergence ratio
     par[0].fixed = 1;
@@ -490,61 +446,21 @@ int main(int argc, char* argv[])
     }
     
     // MPFIT configuration
-    cfg.maxiter = I;
-    cfg.nprint  = (v >= 2 ? 1 : 0);
+    cfg.maxiter = maxiter;
+    cfg.nprint  = (v > 1 ? 1 : 0);
     
     // set up results structure
-    res.xerror = s;
+    res.covar = cov;
     
     // minimise weighted distance between observed and mapped points
     err = mpfit(mapdist, nd, np, p, par, &cfg, x, &res);
     
     // check for errors
     if(err <= 0)
-    {
-        const char* msg = NULL;
-        switch(err)
-        {
-            case MP_ERR_INPUT:
-                msg = "General input parameter error";
-                break;
-            case MP_ERR_NAN:
-                msg = "User function produced non-finite values";
-                break;
-            case MP_ERR_FUNC:
-                msg = "No user function was supplied";
-                break;
-            case MP_ERR_NPOINTS:
-                msg = "No user data points were supplied";
-                break;
-            case MP_ERR_NFREE:
-                msg = "No free parameters";
-                break;
-            case MP_ERR_MEMORY:
-                msg = "Memory allocation error";
-                break;
-            case MP_ERR_INITBOUNDS:
-                msg = "Initial values inconsistent w constraint";
-                break;
-            case MP_ERR_BOUNDS:
-                msg = "Initial constraints inconsistent";
-                break;
-            case MP_ERR_PARAM:
-                msg = "General input parameter error";
-                break;
-            case MP_ERR_DOF:
-                msg = "Not enough degrees of freedom";
-                break;
-        }
-        if(msg)
-            fprintf(stderr, "MPFIT error: %s \n", msg);
-        else
-            fprintf(stderr, "MPFIT error: %d \n", err);
-        return EXIT_FAILURE;
-    }
+        goto err_mpfit;
     
     // output convergence reason if verbose
-    if(v >= 1)
+    if(v > 0)
     {
         const char* msg = NULL;
         switch(err)
@@ -581,7 +497,7 @@ int main(int argc, char* argv[])
     }
     
     // output results structure if very verbose
-    if(v >= 2)
+    if(v > 1)
     {
         printf("MPFIT results:\n");
         printf("  bestnorm  = %16f\n", res.bestnorm);
@@ -633,14 +549,14 @@ int main(int argc, char* argv[])
     }
     
     // write convergence ratios and shears if asked to
-    if(o)
+    if(outfile)
     {
         // open matrix file for writing
-        FILE* fp = fopen(o, "w");
+        FILE* fp = fopen(outfile, "w");
         if(!fp)
         {
-            perror(o);
-            return EXIT_FAILURE;
+            msg = outfile;
+            goto err_file;
         }
         
         // write convergence ratios and shears
@@ -653,14 +569,14 @@ int main(int argc, char* argv[])
     }
     
     // write transformation matrices if asked to
-    if(m)
+    if(matfile)
     {
         // open matrix file for writing
-        FILE* fp = fopen(m, "w");
+        FILE* fp = fopen(matfile, "w");
         if(!fp)
         {
-            perror(m);
-            return EXIT_FAILURE;
+            msg = matfile;
+            goto err_file;
         }
         
         // write transformation matrices
@@ -672,7 +588,7 @@ int main(int argc, char* argv[])
             const double F  = p[5*i+2];
             const double G1 = p[5*i+3];
             const double G2 = p[5*i+4];
-        
+            
             // matrix coefficients
             const double
             A = F*((1 - g1)*(1 + G1) - g2*G2)/(1 - G1*G1 - G2*G2),
@@ -689,14 +605,14 @@ int main(int argc, char* argv[])
     }
     
     // write anchor points if asked to
-    if(a)
+    if(ancfile)
     {
         // open anchor file for writing
-        FILE* fp = fopen(a, "w");
+        FILE* fp = fopen(ancfile, "w");
         if(!fp)
         {
-            perror(m);
-            return EXIT_FAILURE;
+            msg = ancfile;
+            goto err_file;
         }
         
         // write anchor points
@@ -714,7 +630,7 @@ int main(int argc, char* argv[])
     
     free(x);
     free(p);
-    free(s);
+    free(cov);
     free(par);
     
     
@@ -723,4 +639,68 @@ int main(int argc, char* argv[])
      ********/
     
     return EXIT_SUCCESS;
+    
+    
+    /**********
+     * errors *
+     **********/
+    
+    // print usage message, might not be an error
+err_usage:
+    fprintf(err ? stderr : stdout, "%s\n", USAGE);
+    return err ? EXIT_FAILURE : EXIT_SUCCESS;
+    
+    // memory allocation error
+err_malloc:
+    perror(NULL);
+    return EXIT_FAILURE;
+    
+    // file error
+err_file:
+    perror(msg);
+    return EXIT_FAILURE;
+    
+    // handle CMPFIT error codes
+err_mpfit:
+    switch(err)
+    {
+        case MP_ERR_INPUT:
+            msg = "General input parameter error";
+            break;
+        case MP_ERR_NAN:
+            msg = "User function produced non-finite values";
+            break;
+        case MP_ERR_FUNC:
+            msg = "No user function was supplied";
+            break;
+        case MP_ERR_NPOINTS:
+            msg = "No user data points were supplied";
+            break;
+        case MP_ERR_NFREE:
+            msg = "No free parameters";
+            break;
+        case MP_ERR_MEMORY:
+            msg = "Memory allocation error";
+            break;
+        case MP_ERR_INITBOUNDS:
+            msg = "Initial values inconsistent w constraint";
+            break;
+        case MP_ERR_BOUNDS:
+            msg = "Initial constraints inconsistent";
+            break;
+        case MP_ERR_PARAM:
+            msg = "General input parameter error";
+            break;
+        case MP_ERR_DOF:
+            msg = "Not enough degrees of freedom";
+            break;
+    }
+    
+    // print error message or code
+    if(msg)
+        fprintf(stderr, "MPFIT error: %s\n", msg);
+    else
+        fprintf(stderr, "MPFIT error: %d\n", err);
+    
+    return EXIT_FAILURE;
 }
