@@ -13,22 +13,22 @@
 // newline characters
 const char* TOK_NL = "\r\n";
 
-// whitespace charaters
-const char* TOK_WS = " \t";
-
-// delimiter characters
-const char* TOK_DL = ";";
-
 void read_points(const char* filename, int* nimg, int* npts, double** pts)
 {
     // file handle
     FILE* fp;
     
+    // current line in file
+    int line;
+    
     // buffer for lines
     char linebuf[LINELEN];
     
-    // current part of line
-    size_t begin, len;
+    // pointer to beginning of line
+    char* b;
+    
+    // length of line
+    size_t len;
     
     // number of images
     int ni = 0;
@@ -36,11 +36,11 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
     // number of points
     int np = 0;
     
-    // points array
-    double* p;
+    // points array, must be NULL for first call to realloc
+    double* p = NULL;
     
-    // number of columns in line
-    int nc;
+    // group size
+    int ng = 0;
     
     // open points file
     fp = fopen(filename, "r");
@@ -50,12 +50,12 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
         exit(1);
     }
     
-    // points array must be NULL for first call to realloc
-    p = NULL;
-    
     // read file line by line
-    for(int line = 1; fgets(linebuf, sizeof(linebuf), fp); ++line)
+    for(line = 1; fgets(linebuf, sizeof(linebuf), fp); ++line)
     {
+        // point data
+        double x, y, dx, dy, rho;
+        
         // get whole line
         len = strcspn(linebuf, TOK_NL);
         
@@ -70,111 +70,105 @@ void read_points(const char* filename, int* nimg, int* npts, double** pts)
         linebuf[len] = 0;
         
         // skip initial whitespace
-        begin = strspn(linebuf, TOK_WS);
+        b = linebuf;
+        while(*b && isspace(*b))
+            b += 1;
         
-        // skip commented or empty lines
-        if(linebuf[begin] == '#' || linebuf[begin] == '\0')
+        // skip commented lines
+        if(*b == '#')
             continue;
         
-        // find number of columns
-        for(nc = 0; begin <= len; ++nc)
-            begin += strcspn(linebuf + begin, TOK_DL) + 1;
-        
-        // make sure minimum number of columns is given
-        if(nc < 3)
+        // empty lines end groups of points
+        if(*b == '\0')
         {
-            fprintf(stderr, "%s: line %d: expected format: point 1; point 2; "
-                    "point 3 [ ; point 4 ... ]\n", filename, line);
-            exit(1);
+            // ignore blank lines between images
+            if(np == ni*ng)
+                continue;
+            
+            // first group of points defines number of points per image
+            if(!ng)
+                ng = np;
+            
+            // new image stored
+            ni += 1;
+            
+            // number of points must match previous images
+            if(np != ni*ng)
+                goto group_error;
+            
+            // done with line
+            continue;
         }
         
-        // store number of points if this is the first image
-        if(!np)
-            np = nc;
-        
-        // number of points must match previous rows
-        if(nc != np)
+        // parse point, with fallthrough
+        switch(sscanf(b, "%lf%lf%lf%lf%lf", &x, &y, &dx, &dy, &rho))
         {
-            fprintf(stderr, "%s: line %d: number of points does not match "
-                    "previous images\n", filename, line);
-            exit(1);
+            case 2:
+                // no uncertainty given: assume 1px and uncorrelated
+                dx = 1;
+                
+            case 3:
+                // only dx given, assume dy same and uncorrelated
+                dy = dx;
+                
+            case 4:
+                // assume uncorrelated
+                rho = 0;
+                
+            case 5:
+                // all is well
+                break;
+                
+            default:
+                // invalid format
+                fprintf(stderr, "%s: line %d: point must be in the form "
+                        "x y [dx [dy [rho]]]\n", filename, line);
+                exit(1);
         }
         
-        // expand points array for image
-        p = realloc(p, 5*(ni+1)*np*sizeof(double));
+        // expand points array
+        p = realloc(p, 5*(np+1)*sizeof(double));
         if(!p)
         {
             perror(NULL);
             exit(1);
         }
         
-        // back to beginning of line
-        begin = 0;
+        // store point
+        p[5*np+0] = x;
+        p[5*np+1] = y;
+        p[5*np+2] = dx;
+        p[5*np+3] = dy;
+        p[5*np+4] = rho;
         
-        // now process columns
-        for(int i = 0; i < nc; ++i)
-        {
-            // point data
-            double x, y, dx, dy, rho;
-            
-            // skip initial whitespace
-            begin += strspn(linebuf + begin, TOK_WS);
-            
-            // find delimiter to end column
-            len = strcspn(linebuf + begin, TOK_DL);
-            
-            // terminate column string
-            linebuf[begin + len] = 0;
-            
-            // parse point, with fallthrough
-            switch(sscanf(linebuf + begin, "%lf,%lf,%lf,%lf,%lf", &x, &y, &dx, 
-                          &dy, &rho))
-            {
-                case 2:
-                    // no uncertainty given: assume 1px and uncorrelated
-                    dx = 1;
-                    
-                case 3:
-                    // only dx given, assume dy same and uncorrelated
-                    dy = dx;
-                    
-                case 4:
-                    // assume uncorrelated
-                    rho = 0;
-                    
-                case 5:
-                    // all is well
-                    break;
-                    
-                default:
-                    // invalid format
-                    fprintf(stderr, "%s: line %d: column %d: point must be in "
-                            "the form \"x, y\"\n", filename, line, i+1);
-                    exit(1);
-            }
-            
-            // store point
-            p[5*(ni*np+i)+0] = x;
-            p[5*(ni*np+i)+1] = y;
-            p[5*(ni*np+i)+2] = dx;
-            p[5*(ni*np+i)+3] = dy;
-            p[5*(ni*np+i)+4] = rho;
-            
-            // skip past column
-            begin += len + 1;
-        }
-        
-        // new image stored
-        ni += 1;
+        // new point stored
+        np += 1;
     }
     
     // close file
     fclose(fp);
     
-    // store number of images and points
+    // check if there was a final, unterminated group in the file
+    if(np != ni*ng)
+    {
+        if(np == (ni+1)*ng)
+            ni += 1;
+        else
+            goto group_error;
+    }
+    
+    // store number of images and points per image
     *nimg = ni;
-    *npts = np;
+    *npts = ng;
     *pts = p;
+    
+    // done
+    return;
+    
+group_error:
+    fprintf(stderr, "%s: line %d: number of points does not match "
+            "previous images\n", filename, line);
+    exit(1);
 }
 
 void read_table(const char* filename, int* nrow, int* ncol, double** tab)

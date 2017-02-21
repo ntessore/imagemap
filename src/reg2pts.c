@@ -17,9 +17,10 @@ const double SCALE = 0.40853898265363493526;
 
 int main(int argc, char* argv[])
 {
-    int filc = argc - 1;
-    char** filv = argv + 1;
-    int file;
+    int err;
+    
+    int filc, f, n, m;
+    const char** filv;
     
     FILE* fp;
     int line;
@@ -28,18 +29,66 @@ int main(int argc, char* argv[])
     
     unsigned int code;
     
-    if(filc < 1)
+    // default arguments
+    filc = n = 0;
+    
+    // allocate space for max. number of files
+    filv = malloc(argc*sizeof(char*));
+    if(!filv)
     {
-        fprintf(stderr, "usage: regpts FILE1 [ FILE2 ... ]\n");
+        perror(NULL);
+        return EXIT_FAILURE;
+    }
+    
+    // parse arguments
+    err = 0;
+    for(int i = 1; i < argc && !err; ++i)
+    {
+        if(argv[i][0] == '-')
+        {
+            // flags
+            for(char* c = &argv[i][1]; *c; ++c)
+            {
+                // group size
+                if(*c == 'n')
+                {
+                    if(!n && i + 1 < argc)
+                        n = atoi(argv[++i]);
+                    else
+                        err = 1;
+                }
+                // unknown flag
+                else
+                {
+                    err = 1;
+                }
+            }
+        }
+        else
+        {
+            // positional arguments
+            filv[filc++] = argv[i];
+        }
+    }
+    
+    // make sure at least one input file was given
+    if(filc < 1)
+        err = 1;
+    
+    if(err)
+    {
+        fprintf(stderr, "usage: reg2pts [-n NGROUP] FILE1 [ FILE2 ... ]\n");
         return 1;
     }
     
-    for(file = 0; file < filc; ++file)
+    // read regions from files
+    m = 0;
+    for(f = 0; f < filc; ++f)
     {
-        fp = fopen(filv[file], "r");
+        fp = fopen(filv[f], "r");
         if(!fp)
         {
-            perror(filv[file]);
+            perror(filv[f]);
             return 1;
         }
         
@@ -51,7 +100,7 @@ int main(int argc, char* argv[])
             
             if(!linebuf[len] && !feof(fp))
             {
-                fprintf(stderr, "%s: line %d: line too long\n", filv[file], line);
+                fprintf(stderr, "%s: line %d: line too long\n", filv[f], line);
                 exit(1);
             }
             
@@ -105,16 +154,20 @@ int main(int argc, char* argv[])
                 }
             }
             
-            printf("; %g, %g", x, y);
-            if(dx != 1 || dy != 1 || rho != 0)
-                printf(", %g", dx);
+            printf("% 18.8f  % 18.8f", x, y);
+            if(dx != 1 || dy != dx || rho != 0)
+                printf("  % 18.8f", dx);
             if(dy != dx || rho != 0)
-                printf(", %g", dy);
+                printf("  % 18.8f", dy);
             if(rho != 0)
-                printf(", %g", rho);
+                printf("  % 18.8f", rho);
+            printf("\n");
+            
+            m += 1;
+            
+            if(n > 0 && m % n == 0)
+                printf("\n");
         }
-        
-        printf("\n");
         
         fclose(fp);
     }
@@ -123,6 +176,6 @@ int main(int argc, char* argv[])
     
 syntax_error:
     fclose(fp);
-    fprintf(stderr, "%s: line %d: syntax error\n", filv[file], line);
+    fprintf(stderr, "%s: line %d: syntax error\n", filv[f], line);
     return 1;
 }

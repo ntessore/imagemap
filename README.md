@@ -106,31 +106,28 @@ relative magnification matrices and lens quantities from point matching
     usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] [-m MATFILE] [-a ANCFILE]
                    PTSFILE
 
-The `ptmatch` tool reads a list of observed points from `PTSFILE`, where each
-row corresponds to one multiple image, and the first image is the reference
-image. The tool then finds affine transformations that cause the least total
+The `ptmatch` tool reads a list of observed points from `PTSFILE`, which lists
+observed points in multiple images, and the first image is the reference image.
+The tool then finds affine transformations that cause the least total weighted
 distance squared between the transformed points of the reference image and the
 observed points in the other multiple images.
-
-The input file format is
-
-    pt1; pt2; pt3 [ ; pt4 ... ]
-
-where at least three points for three images must be given. The format for each
-point is
-
-    x, y [ , dx [ , dy [ , rho ] ] ]
-
-where at least the position `x, y` must be given. The uncertainty of the point
-is given by the optional covariance `dx, dy, rho`, where `dx = 1px`, `dy = dx`
-and `rho = 0` are assumed by default. Uncertainties for the reference image are
-ignored. An example point definition file [is available](example/points.txt).
-The [`reg2pts`](#re2pts) tool can be used to generate point definitions and
-uncertainties from SAOImage DS9 region files.
 
 From these transformations, the best-fit convergence ratios `f` and reduced
 shears `g` are computed and printed for each image, together with the estimated
 uncertainty of the result.
+
+The input file lists one observed point per row, in the format
+
+    x y [dx [dy [rho]]]
+
+where at least the position `x y` must be given. The uncertainty of the point
+is given by the optional covariance `dx dy rho`, where `dx = 1px`, `dy = dx`
+and `rho = 0` are assumed by default. Uncertainties for the reference image are
+ignored. Multiple images are separated by blank lines, and the number of points
+and their order must be the same for each multiple image. An example point
+definition file [is available](example/points.txt). The [`reg2pts`](#reg2pts)
+tool can be used to generate point definitions and uncertainties from SAOImage
+DS9 region files.
 
 The `-v` and `-q` flags can be used to make the output more verbose and quiet,
 respectively.
