@@ -1,13 +1,61 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
 
 #include "mpfit.h"
 #include "input.h"
 
 const char* USAGE =
-"usage: ptmatch [-vq] [-I MAXITER] [-o OUTFILE] [-m MATFILE] [-a ANCFILE]\n"
-"               PTSFILE";
+"usage: ptmatch [-vqx] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
+"               [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE";
+
+// epsilon for stabilising the Cholesky decomposition
+#ifndef CHOL_EPS
+#define CHOL_EPS 1E-100
+#endif
+
+// Cholesky decomposition
+void chol_eps(int n, const double A[], double eps, double L[])
+{
+    for(int i = 0; i < n; ++i)
+    {
+        for(int j = 0; j < i + 1; ++j)
+        {
+            double s = 0;
+            for(int k = 0; k < j; ++k)
+                s += L[i*n+k]*L[j*n+k];
+            if(j < i)
+                L[i*n+j] = (A[i*n+j] - s)/L[j*n+j];
+            else
+                L[i*n+j] = sqrt(A[i*n+i] + eps - s);
+        }
+        for(int j = i + 1; j < n; ++j)
+            L[i*n+j] = 0;
+    }
+}
+
+// generate array of random normal variates using the polar method
+void randnv(int c, double v[])
+{
+    double x[2];
+    double s;
+    
+    for(int i = 0; i < c; ++i)
+    {
+        if(i%2 == 0)
+        {
+            do
+            {
+                x[0] = 2.*rand()/(1. + RAND_MAX) - 1;
+                x[1] = 2.*rand()/(1. + RAND_MAX) - 1;
+                s = x[0]*x[0] + x[1]*x[1];
+            }
+            while(s >= 1);
+        }
+        v[i] = x[i%2]*sqrt(-2*log(s)/s);
+    }
+}
 
 // weighted distance between observed points and mapped reference points
 int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
@@ -134,6 +182,34 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
     return k == m ? 0 : -1;
 }
 
+// convert g,a,b,d parameters to convergence ratio f and reduced shear g
+void ptofg(int ni, double p[])
+{
+    // reference shear
+    const double g1 = p[3];
+    const double g2 = p[4];
+    
+    for(int i = 1; i < ni; ++i)
+    {
+        // a,b,c,d coefficients for image
+        const double A = p[5*i+2];
+        const double B = p[5*i+3];
+        const double C = g2*A - g1*B;
+        const double D = p[5*i+4];
+        
+        // numerator and denominator for f and g
+        const double J = 0.5*(C*C + D*D - A*A - B*B);
+        const double P = D*g1 - C*g2 + A;
+        const double Q = C*g1 + D*g2 + B;
+        const double R = A*g1 + B*g2 + D;
+        
+        // compute f, g1, g2 for image
+        p[5*i+2] = J/R;
+        p[5*i+3] = P/R;
+        p[5*i+4] = Q/R;
+    }
+}
+
 int main(int argc, char* argv[])
 {
     // error indicator and message
@@ -145,7 +221,8 @@ int main(int argc, char* argv[])
     char* outfile;
     char* matfile;
     char* ancfile;
-    int v, maxiter, ND, DD;
+    char* samfile;
+    int v, xmode, maxiter, nsample, ND, DD, seed;
     
     // number of images and points
     int ni, nx;
@@ -168,8 +245,8 @@ int main(int argc, char* argv[])
      *********/
     
     // default arguments
-    ptsfile = outfile = matfile = ancfile = NULL;
-    v = maxiter = ND = DD = 0;
+    ptsfile = outfile = matfile = ancfile = samfile = NULL;
+    v = xmode = maxiter = nsample = ND = DD = seed = 0;
     
     // parse arguments
     for(int i = 1; i < argc && !err; ++i)
@@ -221,6 +298,30 @@ int main(int argc, char* argv[])
                     else
                         err = 1;
                 }
+                // expectation mode
+                else if(*c == 'x')
+                {
+                    if(!xmode)
+                        xmode = 1;
+                    else
+                        err = 1;
+                }
+                // number of samples
+                else if(*c == 'n')
+                {
+                    if(!nsample && i + 1 < argc)
+                        nsample = atoi(argv[++i]);
+                    else
+                        err = 1;
+                }
+                // output samples file
+                else if(*c == 's')
+                {
+                    if(!samfile && i + 1 < argc)
+                        samfile = argv[++i];
+                    else
+                        err = 1;
+                }
                 // numerical derivatives (undocumented)
                 else if(*c == 'N')
                 {
@@ -230,6 +331,14 @@ int main(int argc, char* argv[])
                 else if(*c == 'D')
                 {
                     DD = 1;
+                }
+                // seed (undocumented)
+                else if(*c == 'S')
+                {
+                    if(!seed && i + 1 < argc)
+                        seed = atoi(argv[++i]);
+                    else
+                        err = 1;
                 }
                 // unknown flag
                 else
@@ -251,6 +360,13 @@ int main(int argc, char* argv[])
     // make sure input file was given
     if(!ptsfile)
         err = 1;
+    
+    // sample output requires expectation mode
+    if(samfile && !xmode)
+    {
+        msg = "sample output (-s) requires expectation mode (-x)";
+        err = 1;
+    }
     
     // check for input errors
     if(err)
@@ -491,9 +607,9 @@ int main(int argc, char* argv[])
                 break;
         }
         if(msg)
-            fprintf(stderr, "MPFIT success: %s \n", msg);
+            printf("MPFIT success: %s \n", msg);
         else
-            fprintf(stderr, "MPFIT success: %d \n", err);
+            printf("MPFIT success: %d \n", err);
     }
     
     // output results structure if very verbose
@@ -512,37 +628,158 @@ int main(int argc, char* argv[])
     }
     
     
+    /********************
+     * expectation mode *
+     ********************/
+    
+    // compute expectation values when `-x` is given
+    if(xmode)
+    {
+        // number of samples
+        int ns;
+        
+        // sample, cumulative weight, cumulative square weight
+        double w, W, W2;
+        
+        // sample log-likelihood
+        double loglike;
+        
+        // arrays for random normal variate, parameters, deviates and mean
+        double* V;
+        double* P;
+        double* D;
+        double* M;
+        
+        // sample file
+        FILE* fp;
+        
+        // seed random number generator
+        srand(seed ? seed : time(0));
+        
+        // number of samples, default is 10000
+        ns = nsample ? nsample : 10000;
+        
+        // allocate arrays for sampling
+        V = malloc(np*sizeof(double));
+        P = malloc(np*sizeof(double));
+        D = malloc(nd*sizeof(double));
+        M = calloc(nd, sizeof(double));
+        if(!V || !P || !D || !M)
+            goto err_malloc;
+        
+        // open sample file for writing if asked to
+        if(samfile)
+        {
+            fp = fopen(samfile, "w");
+            if(!fp)
+            {
+                msg = samfile;
+                goto err_file;
+            }
+        }
+        else
+        {
+            // no output
+            fp = NULL;
+        }
+        
+        // status output if verbose
+        if(v > 0)
+            printf("expectation mode: %d samples\n", ns);
+        
+        // compute square root of covariance matrix (in place)
+        chol_eps(np, cov, CHOL_EPS, cov);
+        
+        // zero cumulative weight
+        W = W2 = 0;
+        
+        // draw samples with given mean and variance
+        for(int i = 0; i < ns; ++i)
+        {
+            // draw uncorrelated random normal variates
+            randnv(np, V);
+            
+            // compute log-probability of draw, ignore fixed parameters
+            w = 0;
+            for(int j = 0; j < np; ++j)
+                if(!par[j].fixed)
+                    w += -0.5*V[j]*V[j];
+            
+            // transform using mean and sqrt(covar)
+            for(int j = 0; j < np; ++j)
+            {
+                P[j] = p[j];
+                for(int k = 0; k < np; ++k)
+                    P[j] += cov[j*np+k]*V[k];
+            }
+            
+            // compute deviates
+            err = mapdist(nd, np, P, D, NULL, x);
+            
+            // check for user function error
+            if(err < 0)
+                goto err_mpfit;
+            
+            // compute log-likelihood of parameters
+            loglike = 0;
+            for(int j = 0; j < nd; ++j)
+                loglike += -0.5*D[j]*D[j];
+            
+            // compute sample weight
+            w = exp(loglike - w);
+            
+            // add to cumulative weight
+            W += w;
+            W2 += w*w;
+            
+            // convert sample parameters to f and g
+            ptofg(ni, P);
+            
+            // add to weighted mean
+            for(int j = 0; j < np; ++j)
+                M[j] += (w/W)*(P[j] - M[j]);
+            
+            // write sample if asked to
+            if(fp)
+            {
+                fprintf(fp, "%28.18E", w);
+                fprintf(fp, "%28.18E", loglike);
+                for(int j = 0; j < np; ++j)
+                    fprintf(fp, "%28.18E", P[j]);
+                fprintf(fp, "\n");
+            }
+        }
+        
+        // output effective number of samples if verbose
+        if(v > 0)
+            printf("effective number of samples: %d\n", (int)(W*W/W2));
+        
+        // close sample file if open
+        if(fp)
+            fclose(fp);
+        
+        // weighted means replace parameter values
+        free(p);
+        p = M;
+        
+        // done with sampling
+        free(V);
+        free(P);
+        free(D);
+    }
+    else
+    {
+        // convert best-fit parameters to f and g
+        ptofg(ni, p);
+    }
+    
+    
     /**********
      * output *
      **********/
     
-    // convert g,a,b,d parameters to convergence ratio and shear
-    for(int i = 1; i < ni; ++i)
-    {
-        // reference shear
-        const double g1 = p[3];
-        const double g2 = p[4];
-        
-        // a,b,c,d coefficients for image
-        const double A = p[5*i+2];
-        const double B = p[5*i+3];
-        const double C = g2*A - g1*B;
-        const double D = p[5*i+4];
-        
-        // numerator and denominator for f and g
-        const double J = 0.5*(C*C + D*D - A*A - B*B);
-        const double P = D*g1 - C*g2 + A;
-        const double Q = C*g1 + D*g2 + B;
-        const double R = A*g1 + B*g2 + D;
-        
-        // compute f, g1, g2 for image
-        p[5*i+2] = J/R;
-        p[5*i+3] = P/R;
-        p[5*i+4] = Q/R;
-    }
-    
-    // print table of convergence ratios and shears
-    if(v >= 0)
+    // print table of convergence ratios and shear if not quiet
+    if(v > -1)
     {
         for(int i = 0; i < ni; ++i)
             printf("% 18.8f % 18.8f % 18.8f\n", p[5*i+2], p[5*i+3], p[5*i+4]);
@@ -648,6 +885,8 @@ int main(int argc, char* argv[])
     // print usage message, might not be an error
 err_usage:
     fprintf(err ? stderr : stdout, "%s\n", USAGE);
+    if(err && msg)
+        fprintf(stderr, "\nerror: %s\n", msg);
     return err ? EXIT_FAILURE : EXIT_SUCCESS;
     
     // memory allocation error

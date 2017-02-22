@@ -14,6 +14,10 @@ BINARIES += regcrop
 endif
 endif
 
+ifndef NO_PYTHON
+BINARIES += dist
+endif
+
 
 ####
 # compiler and linker settings
@@ -63,3 +67,6 @@ reg2pts: src/reg2pts.c
 
 srcim: src/srcim.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lcfitsio
+
+%: src/%.py
+	cp $< $@ && chmod +x $@
