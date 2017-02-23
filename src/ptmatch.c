@@ -7,7 +7,7 @@
 #include "input.h"
 
 const char* USAGE =
-"usage: ptmatch [-vqx] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
+"usage: ptmatch [-vqux] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
 "               [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE";
 
 // epsilon for stabilising the Cholesky decomposition
@@ -222,7 +222,7 @@ int main(int argc, char* argv[])
     char* matfile;
     char* ancfile;
     char* samfile;
-    int v, xmode, maxiter, nsample, ND, DD, seed;
+    int v, xmode, no_uncert, maxiter, nsample, ND, DD, seed;
     
     // number of images and points
     int ni, nx;
@@ -246,7 +246,7 @@ int main(int argc, char* argv[])
     
     // default arguments
     ptsfile = outfile = matfile = ancfile = samfile = NULL;
-    v = xmode = maxiter = nsample = ND = DD = seed = 0;
+    v = xmode = no_uncert = maxiter = nsample = ND = DD = seed = 0;
     
     // parse arguments
     for(int i = 1; i < argc && !err; ++i)
@@ -265,6 +265,14 @@ int main(int argc, char* argv[])
                 else if(*c == 'q')
                 {
                     v -= 1;
+                }
+                // ignore uncertainties
+                else if(*c == 'u')
+                {
+                    if(!no_uncert)
+                        no_uncert = 1;
+                    else
+                        err = 1;
                 }
                 // number of iterations
                 else if(*c == 'I')
@@ -407,10 +415,21 @@ int main(int argc, char* argv[])
                 return EXIT_FAILURE;
             }
             
-            // Cholesky decomposition of inverse covariance matrix
-            x[nx*5*i+5*j+2] = 1/(sqrt(1-rho*rho)*s1);
-            x[nx*5*i+5*j+3] = -rho/(sqrt(1-rho*rho)*s2);
-            x[nx*5*i+5*j+4] = 1/s2;
+            // check if uncertainties should be ignored
+            if(no_uncert)
+            {
+                // default values
+                x[nx*5*i+5*j+2] = 1;
+                x[nx*5*i+5*j+3] = 0;
+                x[nx*5*i+5*j+4] = 1;
+            }
+            else
+            {
+                // Cholesky decomposition of inverse covariance matrix
+                x[nx*5*i+5*j+2] = 1/(sqrt(1-rho*rho)*s1);
+                x[nx*5*i+5*j+3] = -rho/(sqrt(1-rho*rho)*s2);
+                x[nx*5*i+5*j+4] = 1/s2;
+            }
         }
     }
     

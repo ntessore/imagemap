@@ -132,7 +132,7 @@ The `-q` flag can be used to suppress output.
 
 relative magnification matrices and lens quantities from point matching
 
-    usage: ptmatch [-vqx] [-I MAXITER] [-o OUTFILE] [-m MATFILE]
+    usage: ptmatch [-vqux] [-I MAXITER] [-o OUTFILE] [-m MATFILE]
                    [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE
 
 The `ptmatch` tool reads a list of observed points from `PTSFILE`, which lists
@@ -160,6 +160,10 @@ DS9 region files.
 
 The `-v` and `-q` flags can be used to make the output more verbose and quiet,
 respectively.
+
+If the `-u` flag is given, the provided uncertainties for all points will be
+ignored, and defaults of 1px with no correlation are assumed. This can be used
+to test the influence of uncertainties on the result.
 
 The `-x` flag sets the computation to *expectation mode*. After the initial
 fit, a large number of samples is drawn by importance sampling from the
