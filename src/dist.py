@@ -19,6 +19,7 @@ parser = argparse.ArgumentParser(description='distribution plot from samples')
 parser.add_argument('-a', action='store_true', help='plot anchor points')
 parser.add_argument('-f', action='store_true', help='plot convergence ratios')
 parser.add_argument('-g', action='store_true', help='plot reduced shears')
+parser.add_argument('-x', action='store_true', help='print parameter values')
 parser.add_argument('-b', metavar='BINS', type=int, default=50,
                     help='number of bins')
 parser.add_argument('-s', metavar='SMOOTH', type=int, default=2.5,
@@ -153,6 +154,9 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
         
         if args.t:
             ax.axvline(truth[j,k], color='r', lw=1.5, alpha=0.5)
+        
+        if args.x:
+            l += ' = ${:.2f}_{{{:+.2f}}}^{{{:+.2f}}}$'.format(m, s[0], s[1])
         
         ax.set_xlabel(l)
         ax.set_xlim(r)
