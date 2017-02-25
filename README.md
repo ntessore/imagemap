@@ -208,22 +208,50 @@ matches the number `NSAMPLE` of samples.
 
 ### srcim
 
+![srcim example](example/srcim.png)
+
 map observed images to source plane using lens quantities
 
-    usage: srcim OUTFITS INFILE IMFITS0 [IMFITS1 ...]
+    usage: srcim [-0c] [-p PTSFILE] [-a ANCFILE] [-d PAD]
+                 OUTFITS INFILE IMFITS0 [IMFITS1 ...]
 
 The `srcim` tool reads a list of convergence ratios and shears from `INFILE`
 and applies the magnification matrix from each row to the images `IMFITSn`. The
-number of images supplied must match the number of rows in the input file, but
-individual rows can skipped by giving `--` as the image name. The source images
-are saved as a multi-extension FITS file in `OUTFITS`. The indexing of the FITS
-extensions always matches the rows of the input files, and empty extensions are
-written when individual images are skipped.
+number of images supplied must match the number of rows in the input file,
+unless the `-p` option is given, see below. Individual images can skipped by
+giving `--` as the image name. The source images are saved as a multi-extension
+FITS file in `OUTFITS`, unless the `-c` flag is set, see below. The indexing of
+the FITS extensions always matches the rows of the input files, and empty
+extensions are written when individual images are skipped.
 
-The input file must contain rows of the form `f g1 g2`, where each row
-corresponds to one multiple image. The magnification matrices are normalised in
-a way that the transformation of the first image has unit determinant. The
-first value for `f` can differ from unity.
+The input file must contain rows of the form `f g1 g2`, where each row contains
+the convergence ratio `f` and reduced shear `g1`, `g2` for one multiple image.
+The magnification matrices are normalised in a way that the transformation of
+the first image has unit determinant, and all subsequent transformations use
+the same scaling of the source plane.
+
+If the `-0` flag is set, unmapped pixels of the source plane are set to a
+special null value, which is often ignored by consumers of FITS files such as
+SAOimage DS9.
+
+If the `-c` flag is set, the individual source images are combined into a
+single, averaged image of the source plane. In addition, the output FITS will
+contain a second extension that provides the effective coverage of each source
+pixel. This flag requires the `-p` option, see below.
+
+If the `-p` option is given, the points definition from `PTSFILE` is read,
+which should be in the same format as for the [`ptmatch`](#ptmatch) tool,
+although the uncertainties are ignored. When points are provided, the source
+images are cropped to the source images of these points, plus a configurable
+padding, see below.
+
+If the `-a` option is given in `-c` mode, anchor points for the images are read
+from `ANCFILE`. These can improve the positioning for the averaging process.
+
+The `-d` option sets the padding for source images which are cropped around the
+points provided by the `-p` option. A positive value specifies the padding in
+pixels, whereas a negative value specifies the padding as a fraction of the
+bounding box of the source points.
 
 
 Copyright
