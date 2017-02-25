@@ -156,7 +156,7 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
             ax.axvline(truth[j,k], color='r', lw=1.5, alpha=0.5)
         
         if args.x:
-            l += ' = ${:.2f}_{{{:+.2f}}}^{{{:+.2f}}}$'.format(m, s[0], s[1])
+            l += ' = ${:.3f}_{{{:+.3f}}}^{{{:+.3f}}}$'.format(m, s[0], s[1])
         
         ax.set_xlabel(l)
         ax.set_xlim(r)
