@@ -6,28 +6,24 @@
 
 #include "input.h"
 
+const char* USAGE =
+"usage: immap MATFILE IMFITS OUTFITS";
+
 // subsampling
 #ifndef NSUB
 #define NSUB 32
 #endif
 
-// report FITS error and exit
-void fits_error(const char* file, int status)
-{
-    char message[32];
-    fits_get_errstatus(status, message);
-    fprintf(stderr, "%s: %s\n", file, message);
-    exit(1);
-}
-
 int main(int argc, char* argv[])
 {
-    int err;
+    // error flag and message
+    int err = 0;
+    const char* msg = NULL;
     
     // input
-    char* m;
-    char* f;
-    char* o;
+    char* matfile;
+    char* imfile;
+    char* outfile;
     
     // matrix table
     int nrow, ncol;
@@ -40,7 +36,7 @@ int main(int argc, char* argv[])
     double* pix;
     
     // default arguments
-    m = f = o = NULL;
+    matfile = imfile = outfile = NULL;
     
     // parse arguments
     err = 0;
@@ -49,7 +45,7 @@ int main(int argc, char* argv[])
         if(argv[i][0] == '-')
         {
             // flags
-            for(char* a = &argv[i][1]; *a; ++a)
+            for(char* c = &argv[i][1]; *c; ++c)
             {
                 // unknown flag
                 {
@@ -60,54 +56,53 @@ int main(int argc, char* argv[])
         else
         {
             // positional arguments
-            if(!m)
-                m = argv[i];
-            else if(!f)
-                f = argv[i];
-            else if(!o)
-                o = argv[i];
+            if(!matfile)
+                matfile = argv[i];
+            else if(!imfile)
+                imfile = argv[i];
+            else if(!outfile)
+                outfile = argv[i];
             else
                 err = 1;
         }
     }
     
     // make sure input files were given
-    if(!m || !f || !o)
+    if(!matfile || !imfile || !outfile)
         err = 1;
     
     // check for input errors
     if(err)
-    {
-        fprintf(stderr, "usage: immap MATFILE IMFITS OUTFITS\n");
-        return EXIT_FAILURE;
-    }
+        goto err_usage;
     
     // read input file
-    read_table(m, &nrow, &ncol, &T);
+    read_table(matfile, &nrow, &ncol, &T);
     
     // make sure format is correct
     if(ncol != 4)
     {
-        fprintf(stderr, "%s: file needs four columns (matrix entries)\n", f);
-        return EXIT_FAILURE;
+        msg = "file needs four columns (matrix entries)";
+        goto err_matfile;
     }
     
     // read input FITS
-    fits_open_image(&fp, f, READONLY, &err);
+    fits_open_image(&fp, imfile, READONLY, &err);
     fits_get_img_dim(fp, &na, &err);
     fits_get_img_size(fp, 2, n, &err);
     
+    // make sure the image is an image
+    if(!err && na != 2)
+        err = BAD_DIMEN;
+    
     // check for errors
     if(err)
-        fits_error(f, err);
-    
-    // make sure the image is an image
-    if(na != 2)
-        fits_error(f, BAD_DIMEN);
+        goto err_imfits;
     
     // allocate pixel array
     npix = n[0]*n[1];
     pix = malloc(npix*sizeof(double));
+    if(!pix)
+        goto err_malloc;
     
     // read pixels into array and close input file
     fits_read_pix(fp, TDOUBLE, fpix, npix, NULL, pix, NULL, &err);
@@ -115,17 +110,17 @@ int main(int argc, char* argv[])
     
     // check for errors
     if(err)
-        fits_error(f, err);
+        goto err_imfits;
     
     // create output FITS
-    fits_create_file(&fp, o, &err);
+    fits_create_file(&fp, outfile, &err);
     
     // create image extension for reference image
     fits_create_img(fp, DOUBLE_IMG, 2, n, &err);
     
     // record file origin
-    fits_write_key(fp, TSTRING,
-                   "ORIGIN", "immap", "FITS file originator", &err);
+    fits_write_key(fp, TSTRING, "ORIGIN", "immap", "FITS file originator",
+                   &err);
     
     // record the date of FITS creation
     fits_write_date(fp, &err);
@@ -135,7 +130,7 @@ int main(int argc, char* argv[])
     
     // check for errors
     if(err)
-        fits_error(o, err);
+        goto err_outfits;
     
     // transform and write images
     for(int i = 0; !err && i < nrow; ++i)
@@ -171,10 +166,7 @@ int main(int argc, char* argv[])
         const int nmap = N[0]*N[1];
         double* map = calloc(nmap, sizeof(double));
         if(!map)
-        {
-            perror(NULL);
-            return EXIT_FAILURE;
-        }
+            goto err_malloc;
         
         // map reference image onto image 1
         for(int j = 0, k = 0; j < n[1]; ++j)
@@ -219,7 +211,7 @@ int main(int argc, char* argv[])
         
         // check for errors
         if(err)
-            fits_error(o, err);
+            goto err_outfits;
     
     }
     
@@ -228,11 +220,45 @@ int main(int argc, char* argv[])
     
     // check for errors
     if(err)
-        fits_error(o, err);
+        goto err_outfits;
     
-    // done
+    // clean up
     free(pix);
     free(T);
     
+    // done
     return EXIT_SUCCESS;
+    
+    // errors
+    
+err_usage:
+    fprintf(err ? stderr : stdout, "%s\n", USAGE);
+    if(err && msg)
+        fprintf(stderr, "\nerror: %s\n", msg);
+    return err ? EXIT_FAILURE : EXIT_SUCCESS;
+    
+err_malloc:
+    perror(msg);
+    return EXIT_FAILURE;
+    
+err_matfile:
+    fprintf(stderr, "%s: %s\n", matfile, msg);
+    return EXIT_FAILURE;
+    
+err_imfits:
+    msg = imfile;
+    goto err_fitsio;
+    
+err_outfits:
+    msg = outfile;
+    goto err_fitsio;
+    
+err_fitsio:
+    if(err)
+    {
+        char status[32];
+        fits_get_errstatus(err, status);
+        fprintf(stderr, "%s: %s\n", msg, status);
+    }
+    return EXIT_FAILURE;
 }
