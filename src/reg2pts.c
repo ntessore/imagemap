@@ -120,8 +120,20 @@ int main(int argc, char* argv[])
             switch(code)
             {
                 case 625: // global
+                case 515: // image
                 case 861: // physical
                 {
+                    continue;
+                }
+                
+                case 261: // fk4
+                case 262: // fk5
+                case 433: // icrs
+                case 824: // galactic
+                case 845: // ecliptic
+                {
+                    // world coordinates
+                    goto wcs_error;
                     continue;
                 }
                 
@@ -149,8 +161,8 @@ int main(int argc, char* argv[])
                 
                 default:
                 {
-                    fprintf(stderr, "    # %.*s [%u]\n", (int)tok, linebuf+begin, code);
-                    continue;
+                    // unknown keyword
+                    goto keyword_error;
                 }
             }
             
@@ -172,10 +184,20 @@ int main(int argc, char* argv[])
         fclose(fp);
     }
     
-    return 0;
+    return EXIT_SUCCESS;
+    
+wcs_error:
+    fclose(fp);
+    fprintf(stderr, "%s: line %d: world coordinates not supported\n", filv[f], line);
+    return EXIT_FAILURE;
     
 syntax_error:
     fclose(fp);
     fprintf(stderr, "%s: line %d: syntax error\n", filv[f], line);
-    return 1;
+    return EXIT_FAILURE;
+    
+keyword_error:
+    fclose(fp);
+    fprintf(stderr, "%s: line %d: unknown keyword: %.*s [%u]\n", filv[f], line, (int)tok, linebuf+begin, code);
+    return EXIT_FAILURE;
 }
