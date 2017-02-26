@@ -369,7 +369,7 @@ int main(int argc, char* argv[])
                     };
                     
                     // expand bounding box if necessary
-                    if(j == 0 || M[0] > q[0])
+                    if(j == 0 || A[0] > q[0])
                         A[0] = q[0];
                     if(j == 0 || A[1] > q[1])
                         A[1] = q[1];
@@ -466,8 +466,8 @@ int main(int argc, char* argv[])
                     const double dy = k - 0.5 + (t + 0.5)/NSUB - a[2*i + 1];
                     
                     // position in source coordinate system
-                    const double x = M[0]*dx + M[1]*dy - A[0];
-                    const double y = M[2]*dx + M[3]*dy - A[1];
+                    const double x = M[0]*dx + M[1]*dy + 1 - A[0];
+                    const double y = M[2]*dx + M[3]*dy + 1 - A[1];
                     
                     // convert to array indices
                     const int u = x - 0.5;
