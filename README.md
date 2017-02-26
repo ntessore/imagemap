@@ -62,7 +62,7 @@ the number and order of the values agrees with the plot.
 
 map reference image using relative magnification matrices
 
-    usage: immap MATFILE IMFITS OUTFITS
+    usage: immap [-0] [-p PTSFILE] [-a ANCFILE] [-d PAD] MATFILE IMFITS OUTFITS
 
 The `immap` tool reads a list of relative magnification matrices from `MATFILE`
 and applies the transformation from each row to the image from `IMFITS`. The
@@ -75,6 +75,25 @@ contain the reference image as the primary HDU (index 0), and one image-mapped
 version of the reference image for each row of the matrix file, in the same
 order. Hence the output file will contain one more multiple image than there
 are given matrices.
+
+If the `-0` flag is set, unmapped pixels of the output images are set to a
+special null value, which is often ignored by consumers of FITS files such as
+SAOimage DS9.
+
+If the `-p` option is given, the points definition from `PTSFILE` is read,
+which should be in the same format as for the [`ptmatch`](#ptmatch) tool,
+although the uncertainties are ignored. The mapped images are then *cropped to
+fit the provided points for each multiple image* (as opposed to the mapped
+points of the reference image), plus a configurable padding, see below.
+
+If the `-a` option is given together with `-p`, anchor points for the images
+are read from `ANCFILE`. These can improve the positioning of the mapped images
+within each multiple image.
+
+The `-d` option sets the padding for mapped images which are cropped around the
+points provided by the `-p` option. A positive value specifies the padding in
+pixels, whereas a negative value specifies the padding as a fraction of the
+bounding box of the points.
 
 
 ### lens2mat
