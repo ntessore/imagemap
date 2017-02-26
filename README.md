@@ -18,6 +18,8 @@ The following tools are available.
     convert from lens quantities to relative magnification matrices
 -   [**`mat2lens`**](#mat2lens) -
     convert from relative magnification matrices to lens quantities
+-   [**`ptcrop`**](#ptcrop) -
+    crop image using point definitions
 -   [**`ptmatch`**](#ptmatch) -
     relative magnification matrices and lens quantities from point matching
 -   [**`reg2pts`**](#reg2pts) -
@@ -145,6 +147,27 @@ If the `-o` flag is given, the results are written to `OUTFILE` using the same
 format.
 
 The `-q` flag can be used to suppress output.
+
+
+### ptcrop
+
+crop image using point definitions
+
+    usage: ptcrop [-0] [-a ANCFILE] [-d PAD] PTSFILE IMFITS OUTFITS
+
+The `ptcrop` tool reads the points definition from `PTSFILE`, which should be
+in the same format as for the [`ptmatch`](#ptmatch) tool. The image `IMFITS` is
+read and multiple images are cropped to fit the provided point definitions. The
+images are padded by a configurable amount, see below. The cropped images are
+saved as a multi-extension FITS file in `OUTFITS`.
+
+If the `-0` flag is set, unused pixels of the cropped images are set to a
+special null value, which is often ignored by consumers of FITS files such as
+SAOimage DS9.
+
+The `-d` option sets the padding of the cropped images. A positive value
+specifies the padding in pixels, whereas a negative value specifies the padding
+as a fraction of the bounding box of the points.
 
 
 ### ptmatch

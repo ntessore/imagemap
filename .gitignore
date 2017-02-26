@@ -1,9 +1,10 @@
-dist
 local.mk
+
+dist
 immap
 lens2mat
 mat2lens
+ptcrop
 ptmatch
 reg2pts
-regcrop
 srcim

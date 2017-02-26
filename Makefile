@@ -5,17 +5,14 @@
 # inventory
 ####
 
-BINARIES = lens2mat mat2lens ptmatch reg2pts
+ALL = lens2mat mat2lens ptmatch reg2pts
 
 ifdef HAVE_CFITSIO
-BINARIES += immap srcim
-ifdef HAVE_REGIONS
-BINARIES += regcrop
-endif
+ALL += immap ptcrop srcim
 endif
 
 ifndef NO_PYTHON
-BINARIES += dist
+ALL += dist
 endif
 
 
@@ -42,10 +39,10 @@ endif
 
 .PHONY: all clean
 
-all: $(BINARIES)
+all: $(ALL)
 
 clean:
-	$(RM) $(BINARIES)
+	$(RM) $(ALL)
 
 immap: src/immap.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lcfitsio
@@ -56,11 +53,11 @@ lens2mat: src/lens2mat.c src/input.c
 mat2lens: src/mat2lens.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
+ptcrop: src/ptcrop.c src/input.c
+	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lcfitsio
+
 ptmatch: src/ptmatch.c src/input.c src/mpfit.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
-
-regcrop: src/regcrop.c
-	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lregions -lcfitsio
 
 reg2pts: src/reg2pts.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
