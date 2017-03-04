@@ -46,7 +46,7 @@ nsam = len(samples)
 npar = len(samples[0]) - 2
 
 # number of images
-nimg = npar/5;
+nimg = int(npar/5);
 
 # effective number of samples
 neff = int(np.sum(samples[:,0])**2/np.sum(samples[:,0]**2))
