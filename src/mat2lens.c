@@ -147,6 +147,8 @@ int main(int argc, char* argv[])
     // output convergence ratio and shear of reference image
     if(v >= 0)
         printf("% 18.8f % 18.8f % 18.8f\n", 1.0, g1, g2);
+    if(fp)
+        fprintf(fp, "% 18.8f % 18.8f % 18.8f\n", 1.0, g1, g2);
     
     // compute f, g1, g2 for rest of images
     for(int i = 0; i < nrow; ++i)
