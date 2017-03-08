@@ -39,7 +39,7 @@ void chol_eps(int n, const double A[], double eps, double L[])
 void randnv(int c, double v[])
 {
     double x[2];
-    double s;
+    double s = 0;
     
     for(int i = 0; i < c; ++i)
     {
