@@ -164,7 +164,10 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
         ax.set_yticks([], [])
         ax.xaxis.label.set_fontsize(16)
         ax.xaxis.set_label_coords(0.5, -0.2)
-        ax.xaxis.set_major_locator(MaxNLocator('auto', prune='both'))
+        try:
+            ax.xaxis.set_major_locator(MaxNLocator('auto', prune='both'))
+        except ValueError:
+            ax.xaxis.set_major_locator(MaxNLocator(4, prune='both'))
 
 # fix the layout
 plt.tight_layout(h_pad=1.0, w_pad=0.0)
