@@ -141,19 +141,20 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
         
         y /= np.max(y)
         
-        q = quantile(ql, col, wht)
+        ax.fill_between(x, y, facecolor=zc, edgecolor=ec, lw=0.1)
         
-        x2 = np.linspace(x[0], x[-1], 10*args.b)
-        y2 = np.interp(x2, x, y)
-        ax.fill_between(x2, y2, facecolor=zc, edgecolor=ec, lw=0.1)
-        for a, b, c in zip(q[:-1], q[1:], qc):
-            ax.fill_between(x2, y2, where=((a <= x2) & (x2 < b)),
-                            facecolor=c, edgecolor=ec, lw=0.1)
+        if args.s:
+            x2 = np.linspace(x[0], x[-1], 10*args.b)
+            y2 = np.interp(x2, x, y)
+            q = quantile(ql, col, wht)
+            for a, b, c in zip(q[:-1], q[1:], qc):
+                ax.fill_between(x2, y2, where=((a <= x2) & (x2 < b)),
+                                facecolor=c, edgecolor=ec, lw=0.1)
         
         ax.plot(x, y, color='k', lw=0.5)
         
         if args.t:
-            ax.axvline(truth[j,k], color='r', lw=1.5, alpha=0.5)
+            ax.axvline(truth[j,k], color='k', lw=1.5, alpha=0.5, ls='dashed')
         
         if args.x:
             l += ' = ${:.3f}_{{{:+.3f}}}^{{{:+.3f}}}$'.format(m, s[0], s[1])
