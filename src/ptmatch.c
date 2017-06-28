@@ -663,11 +663,13 @@ int main(int argc, char* argv[])
         // sample log-likelihood
         double loglike;
         
-        // arrays for random normal variate, parameters, deviates and mean
+        // array for mean parameter values
+        double* m;
+        
+        // arrays for sampling (random normal variate, parameters, deviates)
         double* V;
         double* P;
         double* D;
-        double* M;
         
         // sample file
         FILE* fp;
@@ -678,12 +680,16 @@ int main(int argc, char* argv[])
         // number of samples, default is 10000
         ns = nsample ? nsample : 10000;
         
+        // allocate zeroed array for mean parameter values
+        m = calloc(np, sizeof(double));
+        if(!m)
+            goto err_malloc;
+        
         // allocate arrays for sampling
         V = malloc(np*sizeof(double));
         P = malloc(np*sizeof(double));
         D = malloc(nd*sizeof(double));
-        M = calloc(nd, sizeof(double));
-        if(!V || !P || !D || !M)
+        if(!V || !P || !D)
             goto err_malloc;
         
         // open sample file for writing if asked to
@@ -756,7 +762,7 @@ int main(int argc, char* argv[])
             
             // add to weighted mean
             for(int j = 0; j < np; ++j)
-                M[j] += (w/W)*(P[j] - M[j]);
+                m[j] += (w/W)*(P[j] - m[j]);
             
             // write sample if asked to
             if(fp)
@@ -779,7 +785,7 @@ int main(int argc, char* argv[])
         
         // weighted means replace parameter values
         free(p);
-        p = M;
+        p = m;
         
         // done with sampling
         free(V);
