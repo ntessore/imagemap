@@ -153,7 +153,7 @@ The `-q` flag can be used to suppress output.
 
 crop image using point definitions
 
-    usage: ptcrop [-0] [-a ANCFILE] [-d PAD] PTSFILE IMFITS OUTFITS
+    usage: ptcrop [-0] [-d PAD] PTSFILE IMFITS OUTFITS
 
 The `ptcrop` tool reads the points definition from `PTSFILE`, which should be
 in the same format as for the [`ptmatch`](#ptmatch) tool. The image `IMFITS` is
