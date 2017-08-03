@@ -447,122 +447,29 @@ int main(int argc, char* argv[])
     if(!p || !cov)
         goto err_malloc;
     
-    // set anchor point to centroid of points for image 0
-    p[0] = p[1] = 0;
-    for(int j = 0; j < nx; ++j)
+    // set initial anchor points to centroids for all images
+    for(int i = 0; i < ni; ++i)
     {
-        p[0] += (x[5*j+0] - p[0])/(j + 1);
-        p[1] += (x[5*j+1] - p[1])/(j + 1);
-    }
-    
-    // compute a,b,c,d coefficients from given points
-    for(int i = 1; i < ni; ++i)
-    {
-        // transformation matrix for image
-        double T[4] = {0, 0, 0, 0};
-        
-        // number of transformations in mean
-        int nt = 0;
-        
-        // centroid of points for image i
-        double q[2] = {0, 0};
-        for(int j = 0; j < nx; ++j)
-        {
-            q[0] += (x[nx*5*i+5*j+0] - q[0])/(j + 1);
-            q[1] += (x[nx*5*i+5*j+1] - q[1])/(j + 1);
-        }
-        
-        // go through points around centroid
-        for(int j = 0, k = 1; j < nx; j = j + 1, k = (k + 1)%nx)
-        {
-            // offsets of reference points and anchor point in image 0
-            const double u[4] = {
-                x[nx*5*0+5*j+0] - p[0], x[nx*5*0+5*j+1] - p[1],
-                x[nx*5*0+5*k+0] - p[0], x[nx*5*0+5*k+1] - p[1]
-            };
-            
-            // offsets of reference points and anchor point in image i
-            const double v[4] = {
-                x[nx*5*i+5*j+0] - q[0], x[nx*5*i+5*j+1] - q[1],
-                x[nx*5*i+5*k+0] - q[0], x[nx*5*i+5*k+1] - q[1]
-            };
-            
-            // transformation matrix from two sets of displacements
-            const double
-            A = (u[3]*v[0] - u[1]*v[2])/(u[0]*u[3] - u[1]*u[2]),
-            B = (u[0]*v[2] - u[2]*v[0])/(u[0]*u[3] - u[1]*u[2]),
-            C = (u[3]*v[1] - u[1]*v[3])/(u[0]*u[3] - u[1]*u[2]),
-            D = (u[0]*v[3] - u[2]*v[1])/(u[0]*u[3] - u[1]*u[2]);
-            
-            // add to mean if transformation is valid
-            if(isfinite(A) && isfinite(B) && isfinite(C) && isfinite(D))
-            {
-                nt += 1;
-                T[0] += (A - T[0])/nt;
-                T[1] += (B - T[1])/nt;
-                T[2] += (C - T[2])/nt;
-                T[3] += (D - T[3])/nt;
-            }
-        }
-        
-        // make sure a transformation matrix was found
-        if(nt == 0)
-        {
-            fprintf(stderr, "%s: points of image %d do not generate a "
-                    "transformation matrix\n", ptsfile, i);
-            return EXIT_FAILURE;
-        }
-        
-        // store c,a,b,d coefficients for matrix
-        p[5*i+1] = T[2] - T[1];
-        p[5*i+2] = T[0] - T[3];
-        p[5*i+3] = T[2] + T[1];
-        p[5*i+4] = T[0] + T[3];
-    }
-    
-    // convergence ratio for image 0 is fixed to unity
-    p[2] = 1;
-    
-    // compute mean reference shear from a,b,c coefficients of images
-    p[3] = p[4] = 0;
-    for(int i = 1, ng = 0; i < ni; ++i)
-    {
-        // a, b, c coefficients of image i
-        const double ci = p[5*i+1];
-        const double ai = p[5*i+2];
-        const double bi = p[5*i+3];
-        
-        // go through pairs of images i, j
-        for(int j = i + 1; j < ni; ++j)
-        {
-            // a, b, c coefficients of image j
-            const double cj = p[5*j+1];
-            const double aj = p[5*j+2];
-            const double bj = p[5*j+3];
-            
-            // compute reference shear from images i, j
-            const double g1 = (ai*cj - aj*ci)/(bi*aj - bj*ai);
-            const double g2 = (bi*cj - bj*ci)/(bi*aj - bj*ai);
-            
-            // update mean if shear from i, j is sane
-            if(isfinite(g1) && isfinite(g2))
-            {
-                ng += 1;
-                p[3] += (g1 - p[3])/ng;
-                p[4] += (g2 - p[4])/ng;
-            }
-        }
-    }
-    
-    // set anchor point to centroid of points for each multiple image
-    for(int i = 1; i < ni; ++i)
-    {
-        p[5*i+0] = p[5*i+1] = 0;
+        p[5*i+0] = 0;
+        p[5*i+1] = 0;
         for(int j = 0; j < nx; ++j)
         {
             p[5*i+0] += (x[nx*5*i+5*j+0] - p[5*i+0])/(j + 1);
             p[5*i+1] += (x[nx*5*i+5*j+1] - p[5*i+1])/(j + 1);
         }
+    }
+    
+    // initial convergence ratio and shear for image 0
+    p[2] = 1;
+    p[3] = 0;
+    p[4] = 0;
+    
+    // set a,b,d coefficients for multiple image to identity matrix
+    for(int i = 1; i < ni; ++i)
+    {
+        p[5*i+2] = 0;
+        p[5*i+3] = 0;
+        p[5*i+4] = 2;
     }
     
     // output initial parameter guess if very verbose
@@ -595,9 +502,12 @@ int main(int argc, char* argv[])
     par[1].fixed = 1;
     par[2].fixed = 1;
     
-    // set up other parameters
-    for(int i = 3; i < np; ++i)
+    // set up parameters
+    for(int i = 0; i < np; ++i)
     {
+        // step size
+        par[i].step = 1e-10;
+        
         // numerical or analytical derivatives
         par[i].side = ND ? 0 : 3;
         
@@ -606,6 +516,9 @@ int main(int argc, char* argv[])
     }
     
     // MPFIT configuration
+    cfg.ftol    = 1e-16;
+    cfg.xtol    = 1e-12;
+    cfg.gtol    = 1e-12;
     cfg.maxiter = maxiter;
     cfg.nprint  = (v > 1 ? 1 : 0);
     
