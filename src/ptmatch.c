@@ -4,58 +4,12 @@
 #include <time.h>
 
 #include "mpfit.h"
+#include "mpis.h"
 #include "input.h"
 
 const char* USAGE =
 "usage: ptmatch [-vqux] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
 "               [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE";
-
-// epsilon for stabilising the Cholesky decomposition
-#ifndef CHOL_EPS
-#define CHOL_EPS 1E-100
-#endif
-
-// Cholesky decomposition
-void chol_eps(int n, const double A[], double eps, double L[])
-{
-    for(int i = 0; i < n; ++i)
-    {
-        for(int j = 0; j < i + 1; ++j)
-        {
-            double s = 0;
-            for(int k = 0; k < j; ++k)
-                s += L[i*n+k]*L[j*n+k];
-            if(j < i)
-                L[i*n+j] = (A[i*n+j] - s)/L[j*n+j];
-            else
-                L[i*n+j] = sqrt(A[i*n+i] + eps - s);
-        }
-        for(int j = i + 1; j < n; ++j)
-            L[i*n+j] = 0;
-    }
-}
-
-// generate array of random normal variates using the polar method
-void randnv(int c, double v[])
-{
-    double x[2];
-    double s = 0;
-    
-    for(int i = 0; i < c; ++i)
-    {
-        if(i%2 == 0)
-        {
-            do
-            {
-                x[0] = 2.*rand()/(1. + RAND_MAX) - 1;
-                x[1] = 2.*rand()/(1. + RAND_MAX) - 1;
-                s = x[0]*x[0] + x[1]*x[1];
-            }
-            while(s >= 1);
-        }
-        v[i] = x[i%2]*sqrt(-2*log(s)/s);
-    }
-}
 
 // weighted distance between observed points and mapped reference points
 int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
@@ -592,147 +546,66 @@ int main(int argc, char* argv[])
     // compute expectation values when `-x` is given
     if(xmode)
     {
-        // number of samples
+        // samples
         int ns;
+        double* s;
         
-        // sample, cumulative weight, cumulative square weight
-        double w, W, W2;
+        // number of samples, use default if not specified
+        ns = nsample ? nsample : 10000;
         
-        // sample log-likelihood
-        double loglike;
-        
-        // array for mean parameter values
-        double* m;
-        
-        // arrays for sampling (random normal variate, parameters, deviates)
-        double* V;
-        double* P;
-        double* D;
-        
-        // sample file
-        FILE* fp;
+        // allocate space for samples
+        s = malloc(ns*(np+2)*sizeof(double));
+        if(!s)
+            goto err_malloc;
         
         // seed random number generator
         srand(seed ? seed : time(0));
-        
-        // number of samples, default is 10000
-        ns = nsample ? nsample : 10000;
-        
-        // allocate zeroed array for mean parameter values
-        m = calloc(np, sizeof(double));
-        if(!m)
-            goto err_malloc;
-        
-        // allocate arrays for sampling
-        V = malloc(np*sizeof(double));
-        P = malloc(np*sizeof(double));
-        D = malloc(nd*sizeof(double));
-        if(!V || !P || !D)
-            goto err_malloc;
-        
-        // open sample file for writing if asked to
-        if(samfile)
-        {
-            fp = fopen(samfile, "w");
-            if(!fp)
-            {
-                msg = samfile;
-                goto err_file;
-            }
-        }
-        else
-        {
-            // no output
-            fp = NULL;
-        }
         
         // status output if verbose
         if(v > 0)
             printf("expectation mode: %d samples\n", ns);
         
-        // compute square root of covariance matrix (in place)
-        chol_eps(np, cov, CHOL_EPS, cov);
-        
-        // zero cumulative weight
-        W = W2 = 0;
-        
-        // draw samples with given mean and variance
-        for(int i = 0; i < ns; ++i)
-        {
-            // draw uncorrelated random normal variates
-            randnv(np, V);
-            
-            // compute log-probability of draw, ignore fixed parameters
-            w = 0;
-            for(int j = 0; j < np; ++j)
-                if(!par[j].fixed)
-                    w += -0.5*V[j]*V[j];
-            
-            // transform using mean and sqrt(covar)
-            for(int j = 0; j < np; ++j)
-            {
-                P[j] = p[j];
-                for(int k = 0; k < np; ++k)
-                    P[j] += cov[j*np+k]*V[k];
-            }
-            
-            // compute deviates
-            err = mapdist(nd, np, P, D, NULL, x);
-            
-            // check for user function error
-            if(err < 0)
-                goto err_mpfit;
-            
-            // compute log-likelihood of parameters
-            loglike = 0;
-            for(int j = 0; j < nd; ++j)
-                loglike += -0.5*D[j]*D[j];
-            
-            // compute sample weight
-            w = exp(loglike - w);
-            
-            // add to cumulative weight
-            W += w;
-            W2 += w*w;
-            
-            // convert sample parameters to f and g
-            ptofg(ni, P);
-            
-            // add to weighted mean
-            for(int j = 0; j < np; ++j)
-                m[j] += (w/W)*(P[j] - m[j]);
-            
-            // write sample if asked to
-            if(fp)
-            {
-                fprintf(fp, "%28.18E", w);
-                fprintf(fp, "%28.18E", loglike);
-                for(int j = 0; j < np; ++j)
-                    fprintf(fp, "%28.18E", P[j]);
-                fprintf(fp, "\n");
-            }
-        }
+        // draw samples
+        err = mpis(mapdist, nd, np, p, cov, x, ns, s);
+        if(err <= 0)
+            goto err_mpfit;
         
         // output effective number of samples if verbose
         if(v > 0)
-            printf("effective number of samples: %d\n", (int)(W*W/W2));
+            printf("effective number of samples: %d\n",
+                   (int)mpis_neff(np, ns, s));
         
-        // close sample file if open
-        if(fp)
+        // convert sampled parameters to f and g
+        for(int i = 0; i < ns; ++i)
+            ptofg(ni, &s[i*(np+2)+2]);
+        
+        // compute mean value of lens quantities from samples
+        mpis_stat(np, ns, s, p, NULL);
+        
+        // write samples if asked to
+        if(samfile)
+        {
+            FILE* fp = fopen(samfile, "w");
+            if(!fp)
+            {
+                msg = samfile;
+                goto err_file;
+            }
+            for(int i = 0; i < ns; ++i)
+            {
+                for(int j = 0; j < np+2; ++j)
+                    fprintf(fp, "  %28.18E", s[i*(np+2)+j]);
+                fprintf(fp, "\n");
+            }
             fclose(fp);
+        }
         
-        // weighted means replace parameter values
-        free(p);
-        p = m;
-        
-        // done with sampling
-        free(V);
-        free(P);
-        free(D);
+        // done with samples
+        free(s);
     }
     else
     {
-        // convert best-fit parameters to f and g
+        // convert parameters to f and g
         ptofg(ni, p);
     }
     

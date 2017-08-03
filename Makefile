@@ -56,7 +56,7 @@ mat2lens: src/mat2lens.c src/input.c
 ptcrop: src/ptcrop.c src/input.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS) -lcfitsio
 
-ptmatch: src/ptmatch.c src/input.c src/mpfit.c
+ptmatch: src/ptmatch.c src/input.c src/mpfit.c src/mpis.c
 	$(CC) $(CFLAGS) $(LDFLAGS) $(CPPFLAGS) -o $@ $^ $(LDLIBS)
 
 reg2pts: src/reg2pts.c
