@@ -187,6 +187,12 @@ int main(int argc, char* argv[])
     double* p;
     double* cov;
     
+    // expectation mode
+    int ns;
+    double* s;
+    double* m;
+    double* e;
+    
     // optimiser data
     int       nd;
     mp_par*   par;
@@ -644,10 +650,6 @@ int main(int argc, char* argv[])
     // compute expectation values when `-x` is given
     if(xmode)
     {
-        // samples
-        int ns;
-        double* s;
-        
         // number of samples, use default if not specified
         ns = nsample ? nsample : 10000;
         
@@ -672,39 +674,31 @@ int main(int argc, char* argv[])
         if(v > 0)
             printf("effective number of samples: %d\n",
                    (int)mpis_neff(np, ns, s));
+    }
+    
+    
+    /***********
+     * results *
+     ***********/
+    
+    // convert maximum-likelihood parameters to f and g
+    ptofg(ni, p);
+    
+    // expectation mode results
+    if(xmode)
+    {
+        // allocate space for results
+        m = malloc(np*sizeof(double));
+        e = malloc(np*sizeof(double));
+        if(!m || !e)
+            goto err_malloc;
         
         // convert sampled parameters to f and g
         for(int i = 0; i < ns; ++i)
             ptofg(ni, &s[i*(np+2)+2]);
         
-        // compute mean value of lens quantities from samples
-        mpis_stat(np, ns, s, p, NULL);
-        
-        // write samples if asked to
-        if(samfile)
-        {
-            FILE* fp = fopen(samfile, "w");
-            if(!fp)
-            {
-                msg = samfile;
-                goto err_file;
-            }
-            for(int i = 0; i < ns; ++i)
-            {
-                for(int j = 0; j < np+2; ++j)
-                    fprintf(fp, "  %28.18E", s[i*(np+2)+j]);
-                fprintf(fp, "\n");
-            }
-            fclose(fp);
-        }
-        
-        // done with samples
-        free(s);
-    }
-    else
-    {
-        // convert parameters to f and g
-        ptofg(ni, p);
+        // compute mean and error of lens quantities from samples
+        mpis_stat(np, ns, s, m, e);
     }
     
     
@@ -715,8 +709,41 @@ int main(int argc, char* argv[])
     // print table of convergence ratios and shear if not quiet
     if(v > -1)
     {
+        const char* labels[] = { "f", "g1", "g2" };
+        
+        printf("+--------+------------");
+        if(xmode)
+            printf("+------------+------------");
+        printf("+\n");
+        
+        printf("| %-6s | %10s ", "value", "ML");
+        if(xmode)
+            printf("| %10s | %10s ", "mean", "sigma");
+        printf("|\n");
+        
+        printf("+--------+------------");
+        if(xmode)
+            printf("+------------+------------");
+        printf("+\n");
+        
         for(int i = 0; i < ni; ++i)
-            printf("% 18.8f % 18.8f % 18.8f\n", p[5*i+2], p[5*i+3], p[5*i+4]);
+        {
+            for(int j = 0; j < 3; ++j)
+            {
+                printf("| %2s_%-3d ", labels[j], i);
+                printf("| % 10.4f ", p[5*i+j+2]);
+                if(xmode)
+                {
+                    printf("| % 10.4f ", m[5*i+j+2]);
+                    printf("| % 10.4f ", e[5*i+j+2]);
+                }
+                printf("|\n");
+            }
+            printf("+--------+------------+");
+            if(xmode)
+                printf("------------+------------+");
+            printf("\n");
+        }
     }
     
     // write convergence ratios and shears if asked to
@@ -794,6 +821,24 @@ int main(int argc, char* argv[])
         fclose(fp);
     }
     
+    // write samples if asked to
+    if(samfile)
+    {
+        FILE* fp = fopen(samfile, "w");
+        if(!fp)
+        {
+            msg = samfile;
+            goto err_file;
+        }
+        for(int i = 0; i < ns; ++i)
+        {
+            for(int j = 0; j < np+2; ++j)
+                fprintf(fp, "  %28.18E", s[i*(np+2)+j]);
+            fprintf(fp, "\n");
+        }
+        fclose(fp);
+    }
+    
     
     /************
      * cleaning *
@@ -803,6 +848,12 @@ int main(int argc, char* argv[])
     free(p);
     free(cov);
     free(par);
+    if(xmode)
+    {
+        free(s);
+        free(m);
+        free(e);
+    }
     
     
     /********
