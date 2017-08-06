@@ -61,22 +61,17 @@ int mpis(mpis_func fn, int m, int n, const double mean[], const double covar[],
     // status of user function
     int status;
     
-    // chi^2 value
-    double chi2;
+    // log-likelihood of sample
+    double loglike;
     
     // largest sample probability
     double qmax = -HUGE_VAL;
     
-    // square root of covariance matrix
+    // allocate arrays
     double* s = malloc(n*n*sizeof(double));
-    if(!s)
-        return MPIS_ERR_MEMORY;
-    
-    // arrays for random normal variate, parameters and deviates
     double* v = malloc(n*sizeof(double));
-    double* p = malloc(n*sizeof(double));
     double* d = malloc(m*sizeof(double));
-    if(!v || !p || !d)
+    if(!s || !v || !d)
         return MPIS_ERR_MEMORY;
     
     // compute square root of covariance matrix
@@ -93,34 +88,33 @@ int mpis(mpis_func fn, int m, int n, const double mean[], const double covar[],
         for(int j = 0; j < n; ++j)
             q += -0.5*v[j]*v[j]*(covar[j*n+j] > 0);
         
-        // transform using mean and sqrt(covar)
+        // transform to sample using mean and sqrt(covar)
         for(int j = 0; j < n; ++j)
         {
-            p[j] = mean[j];
+            double x = mean[j];
             for(int k = 0; k < n; ++k)
-                p[j] += s[j*n+k]*v[k];
+                x += s[j*n+k]*v[k];
+            samples[i*(n+2)+j] = x;
         }
         
         // compute deviates
-        status = fn(m, n, p, d, NULL, private);
+        status = fn(m, n, &samples[i*(n+2)], d, NULL, private);
         
         // check for user function error
         if(status < 0)
             return status;
         
-        // compute chi^2 of parameters
-        chi2 = 0;
+        // compute log-likelihood of parameters
+        loglike = 0;
         for(int j = 0; j < m; ++j)
-            chi2 += -0.5*d[j]*d[j];
+            loglike += -0.5*d[j]*d[j];
         
         // compute relative sample log-probability
-        q = chi2 - q;
+        q = loglike - q;
         
-        // store sample
-        samples[i*(n+2)+0] = q;
-        samples[i*(n+2)+1] = -2*chi2;
-        for(int j = 0; j < n; ++j)
-            samples[i*(n+2)+2+j] = p[j];
+        // store sample likelihood and probability
+        samples[i*(n+2)+n+0] = loglike;
+        samples[i*(n+2)+n+1] = q;
         
         // store largest sample log-probability
         if(q > qmax)
@@ -130,18 +124,17 @@ int mpis(mpis_func fn, int m, int n, const double mean[], const double covar[],
     // free arrays
     free(s);
     free(v);
-    free(p);
     free(d);
     
     // sum relative sample log-probabilities
     w = 0;
     for(int i = 0; i < num_samples; ++i)
-        w += exp(samples[i*(n+2)] - qmax);
+        w += exp(samples[i*(n+2)+n+1] - qmax);
     w = qmax + log(w);
     
     // compute sample probabilities
     for(int i = 0; i < num_samples; ++i)
-        samples[i*(n+2)] = exp(samples[i*(n+2)] - w);
+        samples[i*(n+2)+n+1] = exp(samples[i*(n+2)+n+1] - w);
     
     // return positive value to indicate success
     return 1;
@@ -150,18 +143,19 @@ int mpis(mpis_func fn, int m, int n, const double mean[], const double covar[],
 double mpis_neff(int n, int num_samples, const double samples[])
 {
     // sum of weights and squared weights
-    double w, w2;
+    double W, W2;
     
     // sum weights and squared weights
-    w = w2 = 0;
+    W = W2 = 0;
     for(int i = 0; i < num_samples; ++i)
     {
-        w += samples[i*(n+2)];
-        w2 += samples[i*(n+2)]*samples[i*(n+2)];
+        const double w = samples[i*(n+2)+n+1];
+        W += w;
+        W2 += w*w;
     }
     
     // effective sample size
-    return (w*w)/w2;
+    return (W*W)/W2;
 }
 
 void mpis_stat(int n, int num_samples, const double samples[],
@@ -178,8 +172,8 @@ void mpis_stat(int n, int num_samples, const double samples[],
     // compute mean and variance in one pass
     for(int i = 0; i < num_samples; ++i)
     {
-        // weight of sample
-        const double w = samples[i*(n+2)+0];
+        // weight of sample (= probability)
+        const double w = samples[i*(n+2)+n+1];
         
         // skip zero-weight samples
         if(!w)
@@ -192,7 +186,7 @@ void mpis_stat(int n, int num_samples, const double samples[],
         for(int j = 0; j < n; ++j)
         {
             // parameter value
-            const double x = samples[i*(n+2)+2+j];
+            const double x = samples[i*(n+2)+j];
             
             // difference with current mean
             const double delta = x - mean[j];

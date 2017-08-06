@@ -673,7 +673,7 @@ int main(int argc, char* argv[])
     
     // convert sampled parameters to f and g
     for(int i = 0; i < ns; ++i)
-        ptofg(ni, &s[i*(np+2)+2]);
+        ptofg(ni, &s[i*(np+2)]);
     
     // compute mean and error of lens quantities from samples
     mpis_stat(np, ns, s, m, e);
@@ -788,7 +788,9 @@ int main(int argc, char* argv[])
         }
         for(int i = 0; i < ns; ++i)
         {
-            for(int j = 0; j < np+2; ++j)
+            fprintf(fp, "  %28.18E", s[i*(np+2)+np+1]);
+            fprintf(fp, "  %28.18E", s[i*(np+2)+np+0]);
+            for(int j = 0; j < np; ++j)
                 fprintf(fp, "  %28.18E", s[i*(np+2)+j]);
             fprintf(fp, "\n");
         }
