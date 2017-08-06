@@ -789,7 +789,7 @@ int main(int argc, char* argv[])
         for(int i = 0; i < ns; ++i)
         {
             fprintf(fp, "  %28.18E", s[i*(np+2)+np+1]);
-            fprintf(fp, "  %28.18E", s[i*(np+2)+np+0]);
+            fprintf(fp, "  %28.18E", -2*s[i*(np+2)+np+0]);
             for(int j = 0; j < np; ++j)
                 fprintf(fp, "  %28.18E", s[i*(np+2)+j]);
             fprintf(fp, "\n");
