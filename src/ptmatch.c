@@ -8,7 +8,7 @@
 #include "input.h"
 
 const char* USAGE =
-"usage: ptmatch [-vqux] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
+"usage: ptmatch [-vqu] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
 "               [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE";
 
 // weighted distance between observed points and mapped reference points
@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
     char* matfile;
     char* ancfile;
     char* samfile;
-    int v, xmode, no_uncert, maxiter, nsample, ND, DD, seed;
+    int v, no_uncert, maxiter, nsample, ND, DD, seed;
     
     // number of images and points
     int ni, nx;
@@ -206,7 +206,7 @@ int main(int argc, char* argv[])
     
     // default arguments
     ptsfile = outfile = matfile = ancfile = samfile = NULL;
-    v = xmode = no_uncert = maxiter = nsample = ND = DD = seed = 0;
+    v = no_uncert = maxiter = nsample = ND = DD = seed = 0;
     
     // parse arguments
     for(int i = 1; i < argc && !err; ++i)
@@ -266,14 +266,6 @@ int main(int argc, char* argv[])
                     else
                         err = 1;
                 }
-                // expectation mode
-                else if(*c == 'x')
-                {
-                    if(!xmode)
-                        xmode = 1;
-                    else
-                        err = 1;
-                }
                 // number of samples
                 else if(*c == 'n')
                 {
@@ -328,13 +320,6 @@ int main(int argc, char* argv[])
     // make sure input file was given
     if(!ptsfile)
         err = 1;
-    
-    // sample output requires expectation mode
-    if(samfile && !xmode)
-    {
-        msg = "sample output (-s) requires expectation mode (-x)";
-        err = 1;
-    }
     
     // check for input errors
     if(err)
@@ -643,38 +628,34 @@ int main(int argc, char* argv[])
     }
     
     
-    /********************
-     * expectation mode *
-     ********************/
+    /************
+     * sampling *
+     ************/
     
-    // compute expectation values when `-x` is given
-    if(xmode)
-    {
-        // number of samples, use default if not specified
-        ns = nsample ? nsample : 10000;
-        
-        // allocate space for samples
-        s = malloc(ns*(np+2)*sizeof(double));
-        if(!s)
-            goto err_malloc;
-        
-        // seed random number generator
-        srand(seed ? seed : time(0));
-        
-        // status output if verbose
-        if(v > 0)
-            printf("expectation mode: %d samples\n", ns);
-        
-        // draw samples
-        err = mpis(mapdist, nd, np, p, cov, x, ns, s);
-        if(err <= 0)
-            goto err_mpfit;
-        
-        // output effective number of samples if verbose
-        if(v > 0)
-            printf("effective number of samples: %d\n",
-                   (int)mpis_neff(np, ns, s));
-    }
+    // number of samples, use default if not specified
+    ns = nsample ? nsample : 10000;
+    
+    // allocate space for samples
+    s = malloc(ns*(np+2)*sizeof(double));
+    if(!s)
+        goto err_malloc;
+    
+    // seed random number generator
+    srand(seed ? seed : time(0));
+    
+    // status output if verbose
+    if(v > 0)
+        printf("expectation mode: %d samples\n", ns);
+    
+    // draw samples
+    err = mpis(mapdist, nd, np, p, cov, x, ns, s);
+    if(err <= 0)
+        goto err_mpfit;
+    
+    // output effective number of samples if verbose
+    if(v > 0)
+        printf("effective number of samples: %d\n",
+               (int)mpis_neff(np, ns, s));
     
     
     /***********
@@ -684,22 +665,18 @@ int main(int argc, char* argv[])
     // convert maximum-likelihood parameters to f and g
     ptofg(ni, p);
     
-    // expectation mode results
-    if(xmode)
-    {
-        // allocate space for results
-        m = malloc(np*sizeof(double));
-        e = malloc(np*sizeof(double));
-        if(!m || !e)
-            goto err_malloc;
-        
-        // convert sampled parameters to f and g
-        for(int i = 0; i < ns; ++i)
-            ptofg(ni, &s[i*(np+2)+2]);
-        
-        // compute mean and error of lens quantities from samples
-        mpis_stat(np, ns, s, m, e);
-    }
+    // allocate space for expectation mode results
+    m = malloc(np*sizeof(double));
+    e = malloc(np*sizeof(double));
+    if(!m || !e)
+        goto err_malloc;
+    
+    // convert sampled parameters to f and g
+    for(int i = 0; i < ns; ++i)
+        ptofg(ni, &s[i*(np+2)+2]);
+    
+    // compute mean and error of lens quantities from samples
+    mpis_stat(np, ns, s, m, e);
     
     
     /**********
@@ -711,38 +688,17 @@ int main(int argc, char* argv[])
     {
         const char* labels[] = { "f", "g1", "g2" };
         
-        printf("+--------+------------");
-        if(xmode)
-            printf("+------------+------------");
-        printf("+\n");
-        
-        printf("| %-6s | %10s ", "value", "ML");
-        if(xmode)
-            printf("| %10s | %10s ", "mean", "sigma");
-        printf("|\n");
-        
-        printf("+--------+------------");
-        if(xmode)
-            printf("+------------+------------");
-        printf("+\n");
+        printf("+--------+------------+------------+------------+\n");
+        printf("| %-6s | %10s | %10s | %10s |\n",
+               "value", "ML", "mean", "sigma");
+        printf("+--------+------------+------------+------------+\n");
         
         for(int i = 0; i < ni; ++i)
         {
             for(int j = 0; j < 3; ++j)
-            {
-                printf("| %2s_%-3d ", labels[j], i);
-                printf("| % 10.4f ", p[5*i+j+2]);
-                if(xmode)
-                {
-                    printf("| % 10.4f ", m[5*i+j+2]);
-                    printf("| % 10.4f ", e[5*i+j+2]);
-                }
-                printf("|\n");
-            }
-            printf("+--------+------------+");
-            if(xmode)
-                printf("------------+------------+");
-            printf("\n");
+                printf("| %2s_%-3d | % 10.4f | % 10.4f | % 10.4f |\n",
+                       labels[j], i, p[5*i+j+2], m[5*i+j+2], e[5*i+j+2]);
+            printf("+--------+------------+------------+------------+\n");
         }
     }
     
@@ -848,12 +804,9 @@ int main(int argc, char* argv[])
     free(p);
     free(cov);
     free(par);
-    if(xmode)
-    {
-        free(s);
-        free(m);
-        free(e);
-    }
+    free(s);
+    free(m);
+    free(e);
     
     
     /********

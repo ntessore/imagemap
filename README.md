@@ -174,7 +174,7 @@ as a fraction of the bounding box of the points.
 
 relative magnification matrices and lens quantities from point matching
 
-    usage: ptmatch [-vqux] [-I MAXITER] [-o OUTFILE] [-m MATFILE]
+    usage: ptmatch [-vqu] [-I MAXITER] [-o OUTFILE] [-m MATFILE]
                    [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE
 
 The `ptmatch` tool reads a list of observed points from `PTSFILE`, which lists
@@ -184,8 +184,10 @@ distance squared between the transformed points of the reference image and the
 observed points in the other multiple images.
 
 From these transformations, the best-fit convergence ratios `f` and reduced
-shears `g` are computed and printed for each image, unless the `-x` flag is
-specified (see below).
+shears `g` are computed. In a second step, a large number of samples is drawn
+by importance sampling from the best-fit parameters and covariance matrix.
+These samples are used to estimate the mean and standard deviation for the
+parameters.
 
 The input file lists one observed point per row, in the format
 
@@ -206,12 +208,6 @@ respectively.
 If the `-u` flag is given, the provided uncertainties for all points will be
 ignored, and defaults of 1px with no correlation are assumed. This can be used
 to test the influence of uncertainties on the result.
-
-The `-x` flag sets the computation to *expectation mode*. After the initial
-fit, a large number of samples is drawn by importance sampling from the
-best-fit parameters and covariance matrix. These samples are used to estimate
-the expectation value of the parameters, which are then printed instead of the
-best-fit values.
 
 The `-I` option sets the maximum number of iterations of the fit routine. The
 default value is 200. Convergence of the fit can be checked using verbose
