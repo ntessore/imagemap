@@ -11,17 +11,41 @@ const char* USAGE =
 "usage: ptmatch [-vqu] [-I MAXITER] [-o OUTFILE] [-m MATFILE]\n"
 "               [-a ANCFILE] [-n NSAMPLE] [-s SAMFILE] PTSFILE";
 
+// parameters during fit
+enum {
+    PAR_X,
+    PAR_Y,
+    PAR_A,
+    PAR_B,
+    PAR_C,
+    PAR_D,
+// ---
+// last entry: number of parameters
+// ---
+    NP
+};
+
+// physical quantities
+enum {
+    PHYS_X,
+    PHYS_Y,
+    PHYS_J,
+    PHYS_F,
+    PHYS_G1,
+    PHYS_G2
+};
+
 // weighted distance between observed points and mapped reference points
 int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
 {
     // problem description
-    const int ni = n/5;
+    const int ni = n/NP;
     const int nx = m/(ni - 1)/2;
     const double* x = private;
     
     // reference shear
-    const double g01 = p[3];
-    const double g02 = p[4];
+    const double g01 = p[PHYS_G1];
+    const double g02 = p[PHYS_G2];
     
     // number of deviates computed
     int k = 0;
@@ -30,10 +54,10 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
     for(int i = 1; i < ni; ++i)
     {
         // matrix coefficients
-        const double ai = p[5*i+2];
-        const double bi = p[5*i+3];
+        const double ai = p[NP*i+PAR_A];
+        const double bi = p[NP*i+PAR_B];
         const double ci = g02*ai - g01*bi;
-        const double di = p[5*i+4];
+        const double di = p[NP*i+PAR_D];
         
         // transformation matrix
         const double Ti[4] = { 0.5*(di + ai), 0.5*(bi - ci),
@@ -43,12 +67,12 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
         for(int j = 0; j < nx; ++j)
         {
             // reference image point delta
-            const double x0j[2] = { x[5*nx*0+5*j+0] - p[5*0+0],
-                                    x[5*nx*0+5*j+1] - p[5*0+1] };
+            const double x0j[2] = { x[5*nx*0+5*j+0] - p[NP*0+PAR_X],
+                                    x[5*nx*0+5*j+1] - p[NP*0+PAR_Y] };
             
             // multiple image point delta
-            const double xij[2] = { x[5*nx*i+5*j+0] - p[5*i+0],
-                                    x[5*nx*i+5*j+1] - p[5*i+1] };
+            const double xij[2] = { x[5*nx*i+5*j+0] - p[NP*i+PAR_X],
+                                    x[5*nx*i+5*j+1] - p[NP*i+PAR_Y] };
             
             // whitening transform for observed point
             const double Wij[4] = { x[5*nx*i+5*j+2], x[5*nx*i+5*j+3],
@@ -66,50 +90,50 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
             if(dd)
             {
                 // derivatives for reference shear
-                if(dd[3])
+                if(dd[PHYS_G1])
                 {
-                    dd[3][k+0] = -0.5*bi*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
-                    dd[3][k+1] = -0.5*bi*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
+                    dd[PHYS_G1][k+0] = -0.5*bi*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
+                    dd[PHYS_G1][k+1] = -0.5*bi*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
                 }
-                if(dd[4])
+                if(dd[PHYS_G2])
                 {
-                    dd[4][k+0] = +0.5*ai*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
-                    dd[4][k+1] = +0.5*ai*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
+                    dd[PHYS_G2][k+0] = +0.5*ai*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
+                    dd[PHYS_G2][k+1] = +0.5*ai*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
                 }
                 
                 // derivatives for anchor point
-                if(dd[5*i+0])
+                if(dd[NP*i+PAR_X])
                 {
-                    dd[5*i+0][k+0] = -Wij[0];
-                    dd[5*i+0][k+1] = -Wij[2];
+                    dd[NP*i+0][k+0] = -Wij[0];
+                    dd[NP*i+0][k+1] = -Wij[2];
                 }
-                if(dd[5*i+1])
+                if(dd[NP*i+PAR_Y])
                 {
-                    dd[5*i+1][k+0] = -Wij[1];
-                    dd[5*i+1][k+1] = -Wij[3];
+                    dd[NP*i+1][k+0] = -Wij[1];
+                    dd[NP*i+1][k+1] = -Wij[3];
                 }
                 
                 // derivatives for a, b, d coefficients
-                if(dd[5*i+2])
+                if(dd[NP*i+PAR_A])
                 {
-                    dd[5*i+2][k+0] = -0.5*(Wij[0]*x0j[0] - Wij[1]*x0j[1]
-                                           - Wij[0]*g02*x0j[1]
-                                           + Wij[1]*g02*x0j[0]);
-                    dd[5*i+2][k+1] = -0.5*(Wij[2]*x0j[0] - Wij[3]*x0j[1]
-                                           - Wij[2]*g02*x0j[1]
-                                           + Wij[3]*g02*x0j[0]);
+                    dd[NP*i+PAR_A][k+0] = -0.5*(Wij[0]*x0j[0] - Wij[1]*x0j[1]
+                                                - Wij[0]*g02*x0j[1]
+                                                + Wij[1]*g02*x0j[0]);
+                    dd[NP*i+PAR_A][k+1] = -0.5*(Wij[2]*x0j[0] - Wij[3]*x0j[1]
+                                                - Wij[2]*g02*x0j[1]
+                                                + Wij[3]*g02*x0j[0]);
                 }
-                if(dd[5*i+3])
+                if(dd[NP*i+PAR_B])
                 {
-                    dd[5*i+3][k+0] = -0.5*(Wij[0]*(1 + g01)*x0j[1]
-                                           + Wij[1]*(1 - g01)*x0j[0]);
-                    dd[5*i+3][k+1] = -0.5*(Wij[2]*(1 + g01)*x0j[1]
-                                           + Wij[3]*(1 - g01)*x0j[0]);
+                    dd[NP*i+PAR_B][k+0] = -0.5*(Wij[0]*(1 + g01)*x0j[1]
+                                                + Wij[1]*(1 - g01)*x0j[0]);
+                    dd[NP*i+PAR_B][k+1] = -0.5*(Wij[2]*(1 + g01)*x0j[1]
+                                                + Wij[3]*(1 - g01)*x0j[0]);
                 }
-                if(dd[5*i+4])
+                if(dd[NP*i+PAR_D])
                 {
-                    dd[5*i+4][k+0] = -0.5*(Wij[0]*x0j[0] + Wij[1]*x0j[1]);
-                    dd[5*i+4][k+1] = -0.5*(Wij[2]*x0j[0] + Wij[3]*x0j[1]);
+                    dd[NP*i+PAR_D][k+0] = -0.5*(Wij[0]*x0j[0] + Wij[1]*x0j[1]);
+                    dd[NP*i+PAR_D][k+1] = -0.5*(Wij[2]*x0j[0] + Wij[3]*x0j[1]);
                 }
             }
             
@@ -125,28 +149,36 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
 // convert parameters to physical quantities
 void phys(int ni, double p[])
 {
-    // reference shear
-    const double g01 = p[3];
-    const double g02 = p[4];
+    // get reduced shear in reference image 0
+    const double g01 = p[PHYS_G1];
+    const double g02 = p[PHYS_G2];
     
+    // magnification and convergence ratios in image 0 are unity
+    p[NP*0+PHYS_J] = 1;
+    p[NP*0+PHYS_F] = 1;
+    
+    // convert images to physical parameters
     for(int i = 1; i < ni; ++i)
     {
-        // a,b,c,d coefficients for image
-        const double ai = p[5*i+2];
-        const double bi = p[5*i+3];
+        // a,b,c,d coefficients for image i
+        const double ai = p[NP*i+PAR_A];
+        const double bi = p[NP*i+PAR_B];
         const double ci = g02*ai - g01*bi;
-        const double di = p[5*i+4];
+        const double di = p[NP*i+PAR_D];
+        
+        // determinant of relative magnification matrix
+        const double J = 0.25*(ci*ci + di*di - ai*ai - bi*bi);
         
         // numerator and denominator for f and g
-        const double J = 0.5*(ci*ci + di*di - ai*ai - bi*bi);
         const double P = di*g01 - ci*g02 + ai;
         const double Q = ci*g01 + di*g02 + bi;
         const double R = ai*g01 + bi*g02 + di;
         
-        // compute f, g1, g2 for image
-        p[5*i+2] = J/R;
-        p[5*i+3] = P/R;
-        p[5*i+4] = Q/R;
+        // compute j, f, g1, g2 for image i
+        p[NP*i+PHYS_J]  = J;
+        p[NP*i+PHYS_F]  = 2*J/R;
+        p[NP*i+PHYS_G1] = P/R;
+        p[NP*i+PHYS_G2] = Q/R;
     }
 }
 
@@ -370,7 +402,7 @@ int main(int argc, char* argv[])
      **************/
     
     // total number of parameters, including fixed ones
-    np = 5*ni;
+    np = NP*ni;
     
     // create arrays for parameters and covariance matrix
     p = malloc(np*sizeof(double));
@@ -378,12 +410,16 @@ int main(int argc, char* argv[])
     if(!p || !cov)
         goto err_malloc;
     
-    // set anchor point to centroid of points for image 0
-    p[0] = p[1] = 0;
-    for(int j = 0; j < nx; ++j)
+    // set anchor point to centroid of points for all images
+    for(int i = 0; i < ni; ++i)
     {
-        p[0] += (x[5*j+0] - p[0])/(j + 1);
-        p[1] += (x[5*j+1] - p[1])/(j + 1);
+        p[NP*i+PAR_X] = 0;
+        p[NP*i+PAR_Y] = 0;
+        for(int j = 0; j < nx; ++j)
+        {
+            p[NP*i+PAR_X] += (x[nx*5*i+5*j+0] - p[NP*i+PAR_X])/(j + 1);
+            p[NP*i+PAR_Y] += (x[nx*5*i+5*j+1] - p[NP*i+PAR_Y])/(j + 1);
+        }
     }
     
     // compute a,b,c,d coefficients from given points
@@ -395,27 +431,25 @@ int main(int argc, char* argv[])
         // number of transformations in mean
         int nt = 0;
         
-        // centroid of points for image i
-        double q[2] = {0, 0};
-        for(int j = 0; j < nx; ++j)
-        {
-            q[0] += (x[nx*5*i+5*j+0] - q[0])/(j + 1);
-            q[1] += (x[nx*5*i+5*j+1] - q[1])/(j + 1);
-        }
-        
         // go through points around centroid
         for(int j = 0, k = 1; j < nx; j = j + 1, k = (k + 1)%nx)
         {
             // offsets of reference points and anchor point in image 0
             const double u[4] = {
-                x[nx*5*0+5*j+0] - p[0], x[nx*5*0+5*j+1] - p[1],
-                x[nx*5*0+5*k+0] - p[0], x[nx*5*0+5*k+1] - p[1]
+                x[nx*5*0+5*j+0] - p[NP*0+PAR_X],
+                x[nx*5*0+5*j+1] - p[NP*0+PAR_Y],
+                
+                x[nx*5*0+5*k+0] - p[NP*0+PAR_X],
+                x[nx*5*0+5*k+1] - p[NP*0+PAR_Y]
             };
             
             // offsets of reference points and anchor point in image i
             const double v[4] = {
-                x[nx*5*i+5*j+0] - q[0], x[nx*5*i+5*j+1] - q[1],
-                x[nx*5*i+5*k+0] - q[0], x[nx*5*i+5*k+1] - q[1]
+                x[nx*5*i+5*j+0] - p[NP*i+PAR_X],
+                x[nx*5*i+5*j+1] - p[NP*i+PAR_Y],
+                
+                x[nx*5*i+5*k+0] - p[NP*i+PAR_X],
+                x[nx*5*i+5*k+1] - p[NP*i+PAR_Y]
             };
             
             // transformation matrix from two sets of displacements
@@ -446,34 +480,30 @@ int main(int argc, char* argv[])
             return EXIT_FAILURE;
         }
         
-        // temporarily store coefficient c for matrix
-        p[5*i+1] = T[2] - T[1];
-        
-        // store coefficients a,b,d for matrix
-        p[5*i+2] = T[0] - T[3];
-        p[5*i+3] = T[2] + T[1];
-        p[5*i+4] = T[0] + T[3];
+        // store coefficients a,b,c,d for matrix
+        p[NP*i+PAR_A] = T[0] - T[3];
+        p[NP*i+PAR_B] = T[2] + T[1];
+        p[NP*i+PAR_C] = T[2] - T[1];
+        p[NP*i+PAR_D] = T[0] + T[3];
     }
     
-    // convergence ratio for image 0 is fixed to unity
-    p[2] = 1;
-    
     // compute mean reference shear from a,b,c coefficients of images
-    p[3] = p[4] = 0;
+    p[PHYS_G1] = 0;
+    p[PHYS_G2] = 0;
     for(int i = 1, ng = 0; i < ni; ++i)
     {
         // a, b, c coefficients of image i
-        const double ci = p[5*i+1];
-        const double ai = p[5*i+2];
-        const double bi = p[5*i+3];
+        const double ai = p[NP*i+PAR_A];
+        const double bi = p[NP*i+PAR_B];
+        const double ci = p[NP*i+PAR_C];
         
         // go through pairs of images i, j
         for(int j = i + 1; j < ni; ++j)
         {
             // a, b, c coefficients of image j
-            const double cj = p[5*j+1];
-            const double aj = p[5*j+2];
-            const double bj = p[5*j+3];
+            const double aj = p[NP*j+PAR_A];
+            const double bj = p[NP*j+PAR_B];
+            const double cj = p[NP*j+PAR_C];
             
             // compute reference shear from images i, j
             const double g1 = (ai*cj - aj*ci)/(bi*aj - bj*ai);
@@ -483,20 +513,9 @@ int main(int argc, char* argv[])
             if(isfinite(g1) && isfinite(g2))
             {
                 ng += 1;
-                p[3] += (g1 - p[3])/ng;
-                p[4] += (g2 - p[4])/ng;
+                p[PHYS_G1] += (g1 - p[PHYS_G1])/ng;
+                p[PHYS_G2] += (g2 - p[PHYS_G2])/ng;
             }
-        }
-    }
-    
-    // set anchor point to centroid of points for each multiple image
-    for(int i = 1; i < ni; ++i)
-    {
-        p[5*i+0] = p[5*i+1] = 0;
-        for(int j = 0; j < nx; ++j)
-        {
-            p[5*i+0] += (x[nx*5*i+5*j+0] - p[5*i+0])/(j + 1);
-            p[5*i+1] += (x[nx*5*i+5*j+1] - p[5*i+1])/(j + 1);
         }
     }
     
@@ -512,8 +531,8 @@ int main(int argc, char* argv[])
         printf("initial values:\n");
         for(int i = 0; i < ni; ++i)
         {
-            for(int j = 0; j < 5; ++j)
-                printf("  % 10.4f", q[5*i+j]);
+            for(int j = 0; j < NP; ++j)
+                printf("  % 10.4f", q[NP*i+j]);
             printf("\n");
         }
         free(q);
@@ -532,10 +551,18 @@ int main(int argc, char* argv[])
     if(!par)
         goto err_malloc;
     
-    // fix reference image anchor point and convergence ratio
-    par[0].fixed = 1;
-    par[1].fixed = 1;
-    par[2].fixed = 1;
+    // fix everything except reduced shear in reference image 0
+    for(int j = 0; j < NP; ++j)
+    {
+        if(j == PHYS_G1 || j == PHYS_G2)
+            par[j].fixed = 0;
+        else
+            par[j].fixed = 1;
+    }
+    
+    // fix coefficient c in multiple images i
+    for(int i = 1; i < ni; ++i)
+        par[NP*i+PAR_C].fixed = 1;
     
     // set up parameters
     for(int i = 0; i < np; ++i)
@@ -672,7 +699,7 @@ int main(int argc, char* argv[])
     // print table of convergence ratios and shear if not quiet
     if(v > -1)
     {
-        const char* labels[] = { "f", "g1", "g2" };
+        const char* labels[] = { "x", "y", "j", "f", "g1", "g2" };
         
         printf("+--------+------------+------------+------------+\n");
         printf("| %-6s | %10s | %10s | %10s |\n",
@@ -681,9 +708,9 @@ int main(int argc, char* argv[])
         
         for(int i = 0; i < ni; ++i)
         {
-            for(int j = 0; j < 3; ++j)
+            for(int j = 2; j < NP; ++j)
                 printf("| %2s_%-3d | % 10.4f | % 10.4f | % 10.4f |\n",
-                       labels[j], i, p[5*i+j+2], m[5*i+j+2], e[5*i+j+2]);
+                       labels[j], i, p[NP*i+j], m[NP*i+j], e[NP*i+j]);
             printf("+--------+------------+------------+------------+\n");
         }
     }
@@ -702,7 +729,7 @@ int main(int argc, char* argv[])
         // write convergence ratios and shears
         for(int i = 0; i < ni; ++i)
             fprintf(fp, "% 18.8f % 18.8f % 18.8f\n",
-                    p[5*i+2], p[5*i+3], p[5*i+4]);
+                    p[NP*i+PHYS_F], p[NP*i+PHYS_G1], p[NP*i+PHYS_G2]);
         
         // done
         fclose(fp);
@@ -725,9 +752,9 @@ int main(int argc, char* argv[])
             // convergence ratios and shears of images 0 and i
             const double g1 = p[3];
             const double g2 = p[4];
-            const double F  = p[5*i+2];
-            const double G1 = p[5*i+3];
-            const double G2 = p[5*i+4];
+            const double F  = p[NP*i+PHYS_F];
+            const double G1 = p[NP*i+PHYS_G1];
+            const double G2 = p[NP*i+PHYS_G2];
             
             // matrix coefficients
             const double
@@ -757,7 +784,7 @@ int main(int argc, char* argv[])
         
         // write anchor points
         for(int i = 0; i < ni; ++i)
-            fprintf(fp, "% 18.8f % 18.8f\n", p[5*i+0], p[5*i+1]);
+            fprintf(fp, "% 18.8f % 18.8f\n", p[NP*i+PHYS_X], p[NP*i+PHYS_Y]);
         
         // done with anchor points file
         fclose(fp);

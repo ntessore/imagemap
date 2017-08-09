@@ -14,11 +14,15 @@ def quantile(q, x, w):
     cdf = (cdf - cdf[0])/(cdf[-1] - cdf[0])
     return np.interp(q, cdf, x[ord])
 
+# number of parameters per image
+NP = 6
+
 # parse arguments
 parser = argparse.ArgumentParser(description='distribution plot from samples')
-parser.add_argument('-a', action='store_true', help='plot anchor points')
-parser.add_argument('-f', action='store_true', help='plot convergence ratios')
-parser.add_argument('-g', action='store_true', help='plot reduced shears')
+parser.add_argument('-a', action='store_true', help='plot anchor point')
+parser.add_argument('-j', action='store_true', help='plot magnification ratio')
+parser.add_argument('-f', action='store_true', help='plot convergence ratio')
+parser.add_argument('-g', action='store_true', help='plot reduced shear')
 parser.add_argument('-x', action='store_true', help='print parameter values')
 parser.add_argument('-b', metavar='BINS', type=int, default=50,
                     help='number of bins')
@@ -33,8 +37,8 @@ parser.add_argument('outfile', metavar='OUTFILE', type=str,
 args = parser.parse_args()
 
 # make sure that at least something is shown
-if not (args.a or args.f or args.g):
-    parser.error('nothing to plot, use one or more of -afg')
+if not (args.a or args.j or args.f or args.g):
+    parser.error('nothing to plot, use one or more of -ajfg')
 
 # load samples
 samples = np.loadtxt(args.samfile)
@@ -46,7 +50,7 @@ nsam = len(samples)
 npar = len(samples[0]) - 2
 
 # number of images
-nimg = int(npar/5);
+nimg = int(npar/NP);
 
 # effective number of samples
 neff = int(np.sum(samples[:,0])**2/np.sum(samples[:,0]**2))
@@ -77,6 +81,7 @@ nrow = nimg - fimg
 # number of columns in plot
 ncol = 0
 if args.a: ncol += 2
+if args.j: ncol += 1
 if args.f: ncol += 1
 if args.g: ncol += 2
 
@@ -98,20 +103,27 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
     
     if args.a:
         if i > 0:
-            cols += [ 5*i + 2, 5*i + 3 ]
+            cols += [ NP*i + 2, NP*i + 3 ]
             labs += '$x_{0:}$ $y_{0:}$'.format(i).split()
         else:
             cols += [ None, None ]
             labs += [ None, None ]
+    if args.j:
+        if i > 0:
+            cols += [ NP*i + 4 ]
+            labs += '$j_{0:}$'.format(i).split()
+        else:
+            cols += [ None ]
+            labs += [ None ]
     if args.f:
         if i > 0:
-            cols += [ 5*i + 4 ]
+            cols += [ NP*i + 5 ]
             labs += '$f_{0:}$'.format(i).split()
         else:
             cols += [ None ]
             labs += [ None ]
     if args.g:
-        cols += [ 5*i + 5, 5*i + 6 ]
+        cols += [ NP*i + 6, NP*i + 7 ]
         labs += '$g_{{{0:},1}}$ $g_{{{0:},2}}$'.format(i).split()
     
     for k in range(ncol):
