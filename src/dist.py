@@ -24,8 +24,8 @@ parser.add_argument('-b', metavar='BINS', type=int, default=50,
                     help='number of bins')
 parser.add_argument('-s', metavar='SMOOTH', type=int, default=2.5,
                     help='smoothing scale in bins')
-parser.add_argument('-t', metavar='TRUFILE', type=argparse.FileType('r'),
-                    help='file containing truth values')
+parser.add_argument('-m', metavar='MARKFILE', type=argparse.FileType('r'),
+                    help='file containing marker values')
 parser.add_argument('samfile', metavar='SAMFILE', type=argparse.FileType('r'),
                     help='file containing samples')
 parser.add_argument('outfile', metavar='OUTFILE', type=str,
@@ -55,9 +55,9 @@ neff = int(np.sum(samples[:,0])**2/np.sum(samples[:,0]**2))
 print('using {:} samples from {:} images'.format(nsam, nimg))
 print('effective number of samples: {:}'.format(neff))
 
-# read truth values if given
-if args.t:
-    truth = np.loadtxt(args.t)
+# read marker values if given
+if args.m:
+    marker = np.loadtxt(args.m)
 
 # quantiles
 ql = [ 0.005, 0.025, 0.160, 0.840, 0.975, 0.995 ]
@@ -80,9 +80,9 @@ if args.a: ncol += 2
 if args.f: ncol += 1
 if args.g: ncol += 2
 
-# reshape truth values for plot
-if args.t:
-    truth = truth.reshape(nrow, ncol)
+# reshape marker values for plot
+if args.m:
+    marker = marker.reshape(nrow, ncol)
 
 # size of figure
 xdim = ncol*2.0
@@ -130,6 +130,11 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
         s = quantile([0.16, 0.84], col, wht) - m
         r = m + 5*s
         
+        if args.m:
+            t = marker[j,k]
+            if t - m < 4*s[0]: r[0] = t - 0.1*(r[1] - t)
+            if t - m > 4*s[1]: r[1] = t + 0.1*(t - r[0])
+        
         n, b = np.histogram(col, bins=args.b, weights=wht, range=r)
         
         if args.s:
@@ -153,8 +158,9 @@ for i, j in zip(range(fimg, nimg), range(0, nrow)):
         
         ax.plot(x, y, color='k', lw=0.5)
         
-        if args.t:
-            ax.axvline(truth[j,k], color='k', lw=1.5, alpha=0.5, ls='dashed')
+        if args.m:
+            ax.axvline(t, color='w', lw=1.5, alpha=0.5)
+            ax.axvline(t, color='r', lw=1.5, alpha=0.5)
         
         if args.x:
             l += ' = ${:.3f}_{{{:+.3f}}}^{{{:+.3f}}}$'.format(m, s[0], s[1])
