@@ -25,14 +25,20 @@ enum {
     NP
 };
 
-// physical quantities
+// parameters for reference image
 enum {
-    PHYS_X,
-    PHYS_Y,
-    PHYS_J,
-    PHYS_F,
-    PHYS_G1,
-    PHYS_G2
+    PAR_G1 = 2,
+    PAR_G2 = 3
+};
+
+// observables
+enum {
+    OBS_X,
+    OBS_Y,
+    OBS_J,
+    OBS_F,
+    OBS_G1,
+    OBS_G2
 };
 
 // weighted distance between observed points and mapped reference points
@@ -44,8 +50,8 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
     const double* x = private;
     
     // reference shear
-    const double g01 = p[PHYS_G1];
-    const double g02 = p[PHYS_G2];
+    const double g01 = p[PAR_G1];
+    const double g02 = p[PAR_G2];
     
     // number of deviates computed
     int k = 0;
@@ -90,15 +96,15 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
             if(dd)
             {
                 // derivatives for reference shear
-                if(dd[PHYS_G1])
+                if(dd[PAR_G1])
                 {
-                    dd[PHYS_G1][k+0] = -0.5*bi*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
-                    dd[PHYS_G1][k+1] = -0.5*bi*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
+                    dd[PAR_G1][k+0] = -0.5*bi*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
+                    dd[PAR_G1][k+1] = -0.5*bi*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
                 }
-                if(dd[PHYS_G2])
+                if(dd[PAR_G2])
                 {
-                    dd[PHYS_G2][k+0] = +0.5*ai*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
-                    dd[PHYS_G2][k+1] = +0.5*ai*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
+                    dd[PAR_G2][k+0] = +0.5*ai*(Wij[0]*x0j[1] - Wij[1]*x0j[0]);
+                    dd[PAR_G2][k+1] = +0.5*ai*(Wij[2]*x0j[1] - Wij[3]*x0j[0]);
                 }
                 
                 // derivatives for anchor point
@@ -146,18 +152,20 @@ int mapdist(int m, int n, double* p, double* d, double** dd, void* private)
     return k == m ? 0 : -1;
 }
 
-// convert parameters to physical quantities
-void phys(int ni, double p[])
+// convert parameters to observables
+void observables(int ni, double p[])
 {
     // get reduced shear in reference image 0
-    const double g01 = p[PHYS_G1];
-    const double g02 = p[PHYS_G2];
+    const double g01 = p[PAR_G1];
+    const double g02 = p[PAR_G2];
     
-    // magnification and convergence ratios in image 0 are unity
-    p[NP*0+PHYS_J] = 1;
-    p[NP*0+PHYS_F] = 1;
+    // set observables for image 0
+    p[NP*0+OBS_J]  = 1;
+    p[NP*0+OBS_F]  = 1;
+    p[NP*0+OBS_G1] = g01;
+    p[NP*0+OBS_G2] = g02;
     
-    // convert images to physical parameters
+    // compute observables in images
     for(int i = 1; i < ni; ++i)
     {
         // a,b,c,d coefficients for image i
@@ -174,11 +182,11 @@ void phys(int ni, double p[])
         const double Q = ci*g01 + di*g02 + bi;
         const double R = ai*g01 + bi*g02 + di;
         
-        // compute j, f, g1, g2 for image i
-        p[NP*i+PHYS_J]  = J;
-        p[NP*i+PHYS_F]  = 2*J/R;
-        p[NP*i+PHYS_G1] = P/R;
-        p[NP*i+PHYS_G2] = Q/R;
+        // observables for image i
+        p[NP*i+OBS_J]  = J;
+        p[NP*i+OBS_F]  = 2*J/R;
+        p[NP*i+OBS_G1] = P/R;
+        p[NP*i+OBS_G2] = Q/R;
     }
 }
 
@@ -488,8 +496,8 @@ int main(int argc, char* argv[])
     }
     
     // compute mean reference shear from a,b,c coefficients of images
-    p[PHYS_G1] = 0;
-    p[PHYS_G2] = 0;
+    p[PAR_G1] = 0;
+    p[PAR_G2] = 0;
     for(int i = 1, ng = 0; i < ni; ++i)
     {
         // a, b, c coefficients of image i
@@ -513,8 +521,8 @@ int main(int argc, char* argv[])
             if(isfinite(g1) && isfinite(g2))
             {
                 ng += 1;
-                p[PHYS_G1] += (g1 - p[PHYS_G1])/ng;
-                p[PHYS_G2] += (g2 - p[PHYS_G2])/ng;
+                p[PAR_G1] += (g1 - p[PAR_G1])/ng;
+                p[PAR_G2] += (g2 - p[PAR_G2])/ng;
             }
         }
     }
@@ -527,7 +535,7 @@ int main(int argc, char* argv[])
             goto err_malloc;
         for(int i = 0; i < np; ++i)
             q[i] = p[i];
-        phys(ni, q);
+        observables(ni, q);
         printf("initial values:\n");
         for(int i = 0; i < ni; ++i)
         {
@@ -553,12 +561,8 @@ int main(int argc, char* argv[])
     
     // fix everything except reduced shear in reference image 0
     for(int j = 0; j < NP; ++j)
-    {
-        if(j == PHYS_G1 || j == PHYS_G2)
-            par[j].fixed = 0;
-        else
+        if(j != PAR_G1 && j != PAR_G2)
             par[j].fixed = 1;
-    }
     
     // fix coefficient c in multiple images i
     for(int i = 1; i < ni; ++i)
@@ -675,8 +679,8 @@ int main(int argc, char* argv[])
      * results *
      ***********/
     
-    // convert maximum-likelihood parameters to f and g
-    phys(ni, p);
+    // convert maximum-likelihood parameters to observables
+    observables(ni, p);
     
     // allocate space for sampling results
     m = malloc(np*sizeof(double));
@@ -684,11 +688,11 @@ int main(int argc, char* argv[])
     if(!m || !e)
         goto err_malloc;
     
-    // convert sampled parameters to f and g
+    // convert sampled parameters to observables
     for(int i = 0; i < ns; ++i)
-        phys(ni, &s[i*(np+2)]);
+        observables(ni, &s[i*(np+2)]);
     
-    // compute mean and error of lens quantities from samples
+    // compute mean and error of observables from samples
     mpis_stat(np, ns, s, m, e);
     
     
@@ -696,14 +700,13 @@ int main(int argc, char* argv[])
      * output *
      **********/
     
-    // print table of convergence ratios and shear if not quiet
+    // print table of observables if not quiet
     if(v > -1)
     {
         const char* labels[] = { "x", "y", "j", "f", "g1", "g2" };
         
         printf("+--------+------------+------------+------------+\n");
-        printf("| %-6s | %10s | %10s | %10s |\n",
-               "value", "ML", "mean", "sigma");
+        printf("|        | ML         | mean       | sigma      |\n");
         printf("+--------+------------+------------+------------+\n");
         
         for(int i = 0; i < ni; ++i)
@@ -729,7 +732,7 @@ int main(int argc, char* argv[])
         // write convergence ratios and shears
         for(int i = 0; i < ni; ++i)
             fprintf(fp, "% 18.8f % 18.8f % 18.8f\n",
-                    p[NP*i+PHYS_F], p[NP*i+PHYS_G1], p[NP*i+PHYS_G2]);
+                    p[NP*i+OBS_F], p[NP*i+OBS_G1], p[NP*i+OBS_G2]);
         
         // done
         fclose(fp);
@@ -750,21 +753,23 @@ int main(int argc, char* argv[])
         for(int i = 1; i < ni; ++i)
         {
             // convergence ratios and shears of images 0 and i
-            const double g1 = p[3];
-            const double g2 = p[4];
-            const double F  = p[NP*i+PHYS_F];
-            const double G1 = p[NP*i+PHYS_G1];
-            const double G2 = p[NP*i+PHYS_G2];
+            const double g01 = p[NP*0+OBS_G1];
+            const double g02 = p[NP*0+OBS_G2];
+            const double fi  = p[NP*i+OBS_F];
+            const double gi1 = p[NP*i+OBS_G1];
+            const double gi2 = p[NP*i+OBS_G2];
             
-            // matrix coefficients
-            const double
-            A = F*((1 - g1)*(1 + G1) - g2*G2)/(1 - G1*G1 - G2*G2),
-            B = F*((1 + g1)*G2 - (1 + G1)*g2)/(1 - G1*G1 - G2*G2),
-            C = F*((1 - g1)*G2 - (1 - G1)*g2)/(1 - G1*G1 - G2*G2),
-            D = F*((1 + g1)*(1 - G1) - g2*G2)/(1 - G1*G1 - G2*G2);
+            // transformation matrix
+            const double T[4] = {
+                fi*((1 - g01)*(1 + gi1) - g02*gi2)/(1 - gi1*gi1 - gi2*gi2),
+                fi*((1 + g01)*gi2 - (1 + gi1)*g02)/(1 - gi1*gi1 - gi2*gi2),
+                fi*((1 - g01)*gi2 - (1 - gi1)*g02)/(1 - gi1*gi1 - gi2*gi2),
+                fi*((1 + g01)*(1 - gi1) - g02*gi2)/(1 - gi1*gi1 - gi2*gi2)
+            };
             
             // write matrix coefficients
-            fprintf(fp, "% 18.8f % 18.8f % 18.8f % 18.8f\n", A, B, C, D);
+            fprintf(fp, "% 18.8f % 18.8f % 18.8f % 18.8f\n",
+                    T[0], T[1], T[2], T[3]);
         }
         
         // done writing transforms
@@ -784,7 +789,7 @@ int main(int argc, char* argv[])
         
         // write anchor points
         for(int i = 0; i < ni; ++i)
-            fprintf(fp, "% 18.8f % 18.8f\n", p[NP*i+PHYS_X], p[NP*i+PHYS_Y]);
+            fprintf(fp, "% 18.8f % 18.8f\n", p[NP*i+OBS_X], p[NP*i+OBS_Y]);
         
         // done with anchor points file
         fclose(fp);
